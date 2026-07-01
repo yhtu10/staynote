@@ -402,6 +402,30 @@ export default function HotelPage() {
           </div>
         </section>
 
+        {/* 社群連結 */}
+        <section className="bg-white border border-neutral-200 rounded-2xl p-5">
+          <p className="text-xs text-neutral-400 uppercase tracking-widest mb-3">這間飯店在社群上怎麼說？</p>
+          <p className="text-sm text-neutral-500 mb-4">StayNote 提供結構化評論，社群上還有更多即時分享。</p>
+          <div className="flex gap-3 flex-wrap">
+            <a
+              href={`https://www.threads.net/search?q=${encodeURIComponent(hotel.name)}&serp_type=default`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 border border-neutral-200 rounded-full px-4 py-2 text-sm text-neutral-600 hover:border-neutral-400 transition-colors"
+            >
+              <span>𝕋</span> 搜尋 Threads →
+            </a>
+            <a
+              href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(hotel.name)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 border border-neutral-200 rounded-full px-4 py-2 text-sm text-neutral-600 hover:border-neutral-400 transition-colors"
+            >
+              <span>📷</span> 搜尋 IG →
+            </a>
+          </div>
+        </section>
+
         {/* Bottom CTA */}
         <section className="bg-neutral-100 rounded-2xl p-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -426,7 +450,16 @@ type ReviewCardProps = {
   older?: boolean
 }
 
+// mock 評論者履歷（之後從 Supabase 計算）
+const reviewerStats: Record<string, { countries: number; stays: number }> = {
+  "陳小明": { countries: 15, stays: 42 },
+  "Lin Mei": { countries: 8, stays: 19 },
+  "旅人 Kevin": { countries: 11, stays: 31 },
+  "Sophia W.": { countries: 6, stays: 14 },
+}
+
 function ReviewCard({ review, older = false }: ReviewCardProps) {
+  const stats = reviewerStats[review.author]
   return (
     <div className={`bg-white border border-neutral-200 rounded-xl p-5 ${older ? "opacity-80" : ""}`}>
       <div className="flex items-center gap-3 mb-3">
@@ -435,7 +468,12 @@ function ReviewCard({ review, older = false }: ReviewCardProps) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-neutral-900">{review.author}</p>
-          <div className="flex items-center gap-2 flex-wrap">
+          {stats && (
+            <p className="text-xs text-neutral-400">
+              去過 {stats.countries} 個國家 · 住過 {stats.stays} 間飯店
+            </p>
+          )}
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
             <span className="text-xs text-neutral-400">{review.checkInDate} 入住</span>
             <span className="text-xs text-neutral-300">·</span>
             <span className="text-xs text-neutral-400">{review.bedType}</span>
