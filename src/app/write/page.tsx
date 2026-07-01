@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useMemo } from 'react'
+import { useSession, signIn } from 'next-auth/react'
 import { HOTELS } from '@/data/hotels'
 
 // --- Web Speech API types ---
@@ -160,8 +161,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
 
 // --- Main page ---
 export default function WritePage() {
-  // Login gate
-  const [loggedIn, setLoggedIn] = useState(false)
+  const { data: session, status } = useSession()
 
   // Hotel search
   const [hotelQuery, setHotelQuery] = useState('')
@@ -277,7 +277,15 @@ export default function WritePage() {
   })
 
   // --- Login gate ---
-  if (!loggedIn) {
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="text-neutral-400 text-sm">載入中…</div>
+      </div>
+    )
+  }
+
+  if (!session) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center px-5">
         <div className="bg-white border border-neutral-200 rounded-2xl p-8 max-w-sm w-full text-center">
@@ -289,7 +297,7 @@ export default function WritePage() {
             登入後才能發佈評論，<br />並賺取訂房點數。
           </p>
           <button
-            onClick={() => setLoggedIn(true)}
+            onClick={() => signIn('line')}
             className="w-full bg-[#06C755] text-white text-sm font-medium py-3 rounded-full hover:bg-[#05b34c] transition-colors flex items-center justify-center gap-2"
           >
             <span className="text-base">💬</span>
