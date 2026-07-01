@@ -82,9 +82,14 @@ export default function Home() {
       <nav className="border-b border-neutral-200 bg-white sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-5 h-14 flex items-center justify-between">
           <span className="font-semibold text-neutral-900 tracking-tight">StayNote</span>
-          <Link href="/write" className="text-sm text-neutral-500 border border-neutral-200 rounded-full px-4 py-1.5 hover:border-neutral-400 transition-colors">
-            分享住宿
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/profile" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
+              我的
+            </Link>
+            <Link href="/write" className="text-sm text-neutral-500 border border-neutral-200 rounded-full px-4 py-1.5 hover:border-neutral-400 transition-colors">
+              分享住宿
+            </Link>
+          </div>
         </div>
       </nav>
 
