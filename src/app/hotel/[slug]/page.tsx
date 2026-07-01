@@ -238,37 +238,36 @@ export default function HotelPage() {
         </section>
 
         {/* Booking CTA */}
-        <section className="bg-white border border-neutral-200 rounded-2xl p-5">
-          <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
-            <div>
-              <p className="font-medium text-neutral-900 text-sm mb-1">查看即時房價 &amp; 訂房</p>
-              <p className="text-xs text-neutral-400">比較多個平台，找到最優惠價格</p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <a
-                href={hotel.bookingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-full hover:bg-blue-700 transition-colors"
-              >
-                Booking.com
-              </a>
-              <a
-                href={hotel.agodaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-red-500 text-white text-sm font-medium px-4 py-2 rounded-full hover:bg-red-600 transition-colors"
-              >
-                Agoda
-              </a>
-            </div>
+        <section className="bg-white border border-neutral-200 rounded-2xl p-5 flex flex-col gap-3">
+          <div>
+            <p className="font-medium text-neutral-900 text-sm mb-1">查看即時房價 &amp; 訂房</p>
+            <p className="text-xs text-neutral-400">比較 Booking、Agoda、Hotels.com 等多平台最低價</p>
           </div>
-          <div className="bg-amber-50 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-center gap-2">
-            <span>🎁</span>
-            <span>分享其他住宿心得，可賺取 <strong>KBK exchange</strong> 訂房折抵點數，下次訂房直接扣抵。</span>
-            <Link href="/write" className="ml-auto whitespace-nowrap text-amber-700 underline underline-offset-2 hover:text-amber-900">
-              去寫評論
-            </Link>
+          <a
+            href={`https://www.google.com/travel/hotels/search?q=${encodeURIComponent(hotel.name)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between bg-neutral-900 text-white rounded-xl px-5 py-3.5 hover:bg-neutral-700 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">🔍</span>
+              <span className="text-sm font-medium">Google Hotels 比價</span>
+            </div>
+            <span className="text-xs text-neutral-400">→</span>
+          </a>
+          <div className="flex items-center justify-between border border-amber-200 bg-amber-50 rounded-xl px-4 py-3 gap-3">
+            <div>
+              <p className="text-sm font-medium text-amber-800">KBK exchange</p>
+              <p className="text-xs text-amber-600 mt-0.5">使用 StayNote 點數可直接折抵訂房金額</p>
+            </div>
+            <a
+              href="https://kbk.exchange"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 text-xs font-medium text-amber-700 border border-amber-300 rounded-full px-3 py-1.5 hover:bg-amber-100 transition-colors"
+            >
+              前往訂房 →
+            </a>
           </div>
         </section>
 
