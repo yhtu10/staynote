@@ -116,7 +116,7 @@ export default function Home() {
           <p className="text-xs text-neutral-400 uppercase tracking-widest mb-4">本週編輯推薦</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {featuredReviews.map((r) => (
-              <div key={r.id} className="bg-white border border-neutral-200 rounded-xl p-4 flex flex-col gap-3 hover:border-neutral-400 transition-colors cursor-pointer">
+              <Link key={r.id} href={`/hotel/${r.id}`} className="bg-white border border-neutral-200 rounded-xl p-4 flex flex-col gap-3 hover:border-neutral-400 transition-colors cursor-pointer">
                 <div className={`${r.color} rounded-lg h-16 flex items-center justify-center`}>
                   <span className="text-2xl">🏨</span>
                 </div>
@@ -130,7 +130,7 @@ export default function Home() {
                   <StarRating count={r.rating} />
                   <span className="text-xs text-neutral-400">{r.author}</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
