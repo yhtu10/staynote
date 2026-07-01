@@ -95,8 +95,9 @@ function ReviewCard({ review, older = false }: { review: HotelReview; older?: bo
   )
 }
 
-export default function HotelPage({ params }: { params: { slug: string } }) {
-  const hotel = getHotelBySlug(params.slug)
+export default async function HotelPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const hotel = getHotelBySlug(slug)
   if (!hotel) notFound()
 
   const rating = calcRating(hotel.ratingDist, hotel.totalReviews)
