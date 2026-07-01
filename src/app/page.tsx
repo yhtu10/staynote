@@ -36,6 +36,7 @@ const featuredReviews = [
 const latestReviews = [
   {
     id: 1,
+    hotelId: 4,
     initial: "林",
     name: "林建宏",
     countries: 11,
@@ -50,6 +51,7 @@ const latestReviews = [
   },
   {
     id: 2,
+    hotelId: 5,
     initial: "蘇",
     name: "蘇意涵",
     countries: 12,
@@ -65,6 +67,7 @@ const latestReviews = [
   },
   {
     id: 3,
+    hotelId: 6,
     initial: "張",
     name: "張雅婷",
     countries: 9,
@@ -209,7 +212,9 @@ export default function Home() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2 mb-0.5">
-                    <span className="text-sm font-medium text-neutral-900 truncate">{r.hotel}</span>
+                    <Link href={`/hotel/${r.hotelId}`} className="text-sm font-medium text-neutral-900 truncate hover:text-blue-600 transition-colors">
+                      {r.hotel}
+                    </Link>
                     <StarRating count={r.rating} />
                   </div>
                   <p className="text-xs text-neutral-400 mb-2">
