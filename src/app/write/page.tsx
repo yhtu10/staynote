@@ -2,6 +2,37 @@
 
 import { useState, useRef, useCallback } from 'react'
 
+// --- Web Speech API types ---
+interface ISpeechRecognition extends EventTarget {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  start(): void
+  stop(): void
+  onstart: (() => void) | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+  onresult: ((e: ISpeechRecognitionEvent) => void) | null
+}
+interface ISpeechRecognitionEvent {
+  results: ISpeechRecognitionResultList
+}
+interface ISpeechRecognitionResultList {
+  length: number
+  [index: number]: ISpeechRecognitionResult
+}
+interface ISpeechRecognitionResult {
+  isFinal: boolean
+  [index: number]: { transcript: string }
+}
+declare global {
+  interface Window {
+    SpeechRecognition: new () => ISpeechRecognition
+    webkitSpeechRecognition: new () => ISpeechRecognition
+  }
+}
+
 // --- Types ---
 type TravelPurpose = '商務' | '情侶' | '家庭' | '獨旅休閒' | '朋友同遊'
 type BedType = '一大床' | '兩小床' | '單人床' | '其他'
@@ -148,7 +179,7 @@ export default function WritePage() {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [parsedInfo, setParsedInfo] = useState<ParsedInfo | null>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<ISpeechRecognition | null>(null)
 
   // Basic info fields
   const [checkInMonth, setCheckInMonth] = useState('')
@@ -202,7 +233,7 @@ export default function WritePage() {
         setParsedInfo(parseTranscript(finalText))
       }
     }
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
+    recognition.onresult = (e: ISpeechRecognitionEvent) => {
       let interim = ''
       finalText = ''
       for (let i = 0; i < e.results.length; i++) {
