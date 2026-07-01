@@ -7,8 +7,8 @@ const hotel = {
   address: "南投縣魚池鄉中山路142號",
   mapQuery: "The+Lalu+涵碧樓+日月潭",
   priceRange: "NT$ 12,000 – 28,000 / 晚",
-  bookingUrl: "https://www.booking.com",
-  agodaUrl: "https://www.agoda.com",
+  get bookingUrl() { return `https://www.booking.com/search.html?ss=${encodeURIComponent(this.name)}` },
+  get agodaUrl() { return `https://www.agoda.com/search?textToSearch=${encodeURIComponent(this.name)}` },
   ratingDist: [
     { stars: 5, count: 32, pct: 37 },
     { stars: 4, count: 35, pct: 40 },

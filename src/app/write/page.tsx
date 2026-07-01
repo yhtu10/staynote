@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useMemo } from 'react'
+import { HOTELS } from '@/data/hotels'
 
 // --- Web Speech API types ---
 interface ISpeechRecognition extends EventTarget {
@@ -54,11 +55,6 @@ const BED_TYPES: BedType[] = ['一大床', '兩小床', '單人床', '其他']
 const KIDS_AGES: KidsAge[] = ['0–2 歲', '3–6 歲', '7–12 歲', '13 歲以上']
 const GUEST_TYPES: GuestType[] = ['獨旅', '情侶', '家庭（含幼兒）', '商務出差', '銀髮旅遊', '預算旅行', '奢華享受']
 
-const MOCK_HOTELS = [
-  'The Lalu 涵碧樓', 'W Taipei', 'Mandarin Oriental Taipei',
-  'Hoshinoya Kyoto 星のや京都', 'Trunk Hotel Tokyo', 'Alaya Ubud',
-  'The Grand Hyatt 台北', 'Lotte Hotel Seoul', '台南晶英酒店',
-]
 
 // --- Voice parser (keyword-based, no API needed) ---
 function parseTranscript(text: string): ParsedInfo {
@@ -200,9 +196,11 @@ export default function WritePage() {
   const [rating, setRating] = useState(0)
   const [recommendFor, setRecommendFor] = useState<GuestType[]>([])
 
-  const hotelSuggestions = MOCK_HOTELS.filter(
-    (h) => hotelQuery.length > 0 && h.toLowerCase().includes(hotelQuery.toLowerCase())
-  )
+  const hotelSuggestions = useMemo(() => {
+    if (hotelQuery.length < 2) return []
+    const q = hotelQuery.toLowerCase()
+    return HOTELS.filter((h) => h.name.toLowerCase().includes(q)).slice(0, 8)
+  }, [hotelQuery])
 
   const applyParsed = useCallback((parsed: ParsedInfo) => {
     if (parsed.checkInMonth) setCheckInMonth(parsed.checkInMonth)
@@ -336,12 +334,13 @@ export default function WritePage() {
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-sm z-10 overflow-hidden">
                 {hotelSuggestions.map((h) => (
                   <button
-                    key={h}
+                    key={h.id}
                     type="button"
-                    onMouseDown={() => { setHotelQuery(h); setSelectedHotel(h); setShowSuggestions(false) }}
+                    onMouseDown={() => { setHotelQuery(h.name); setSelectedHotel(h.name); setShowSuggestions(false) }}
                     className="w-full text-left px-4 py-3 text-sm text-neutral-700 hover:bg-neutral-50 border-b border-neutral-100 last:border-0"
                   >
-                    {h}
+                    <span>{h.name}</span>
+                    <span className="text-xs text-neutral-400 ml-2">{h.prefecture}, {h.country}</span>
                   </button>
                 ))}
                 <button
