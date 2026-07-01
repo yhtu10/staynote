@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getHotelBySlug, HotelReview } from "@/data/hotelDetails"
+import ReviewCardInteractive from "@/components/ReviewCardInteractive"
 
 function calcRating(dist: { stars: number; count: number }[], total: number) {
   const raw = dist.reduce((sum, r) => sum + r.stars * r.count, 0) / total
@@ -48,52 +49,6 @@ function PhotoThumbs({ photos }: { photos: string[] }) {
   )
 }
 
-function ReviewCard({ review, older = false }: { review: HotelReview; older?: boolean }) {
-  return (
-    <div className={`bg-white border border-neutral-200 rounded-xl p-5 ${older ? "opacity-75" : ""}`}>
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`w-9 h-9 rounded-full ${review.avatarColor} flex items-center justify-center text-sm font-medium flex-shrink-0`}>
-          {review.initial}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-neutral-900">{review.author}</p>
-          <p className="text-xs text-neutral-400">去過 {review.countries} 個國家 · 住過 {review.stays} 間飯店</p>
-          <div className="flex items-center gap-2 flex-wrap mt-0.5">
-            <span className="text-xs text-neutral-400">{review.checkInDate} 入住</span>
-            <span className="text-xs text-neutral-300">·</span>
-            <span className="text-xs text-neutral-400">{review.bedType}</span>
-            {review.purpose.map((p) => (
-              <span key={p} className="text-xs bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded-full">{p}</span>
-            ))}
-          </div>
-        </div>
-        <Stars count={review.rating} />
-      </div>
-      <div className="flex flex-col gap-2 mb-3">
-        <div className="flex items-start gap-2">
-          <span className="text-emerald-500 text-xs mt-0.5 flex-shrink-0">✓ 滿意</span>
-          <p className="text-sm text-neutral-700 leading-relaxed">{review.positive}</p>
-        </div>
-        {review.negative !== "無明顯缺點" && (
-          <div className="flex items-start gap-2">
-            <span className="text-neutral-400 text-xs mt-0.5 flex-shrink-0">△ 待改善</span>
-            <p className="text-sm text-neutral-500 leading-relaxed">{review.negative}</p>
-          </div>
-        )}
-      </div>
-      <PhotoThumbs photos={review.photos} />
-      {review.recommendFor.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap pt-3 mt-3 border-t border-neutral-100">
-          <span className="text-xs text-neutral-400">推薦給</span>
-          {review.recommendFor.map((g) => (
-            <span key={g} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{g}</span>
-          ))}
-          <span className="text-xs text-neutral-300 ml-auto">{review.date}</span>
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default async function HotelPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -261,7 +216,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
             <Link href="/write" className="text-sm text-blue-600 hover:text-blue-800">分享你的住宿 →</Link>
           </div>
           <div className="flex flex-col gap-4">
-            {recentReviews.map((r) => <ReviewCard key={r.id} review={r} />)}
+            {recentReviews.map((r) => <ReviewCardInteractive key={r.id} review={r} />)}
             {olderReviews.length > 0 && (
               <>
                 <div className="flex items-center gap-3 py-1">
@@ -269,7 +224,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                   <span className="text-xs text-neutral-400 whitespace-nowrap">較舊評論，僅供參考</span>
                   <hr className="flex-1 border-neutral-200" />
                 </div>
-                {olderReviews.map((r) => <ReviewCard key={r.id} review={r} older />)}
+                {olderReviews.map((r) => <ReviewCardInteractive key={r.id} review={r} older />)}
               </>
             )}
             {oldestReviews.length > 0 && (
@@ -283,7 +238,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                   <hr className="flex-1 border-neutral-200" />
                 </summary>
                 <div className="flex flex-col gap-4 mt-4">
-                  {oldestReviews.map((r) => <ReviewCard key={r.id} review={r} older />)}
+                  {oldestReviews.map((r) => <ReviewCardInteractive key={r.id} review={r} older />)}
                 </div>
               </details>
             )}
