@@ -31,7 +31,6 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
     { data: property },
     { data: stories },
     { data: userReviews },
-    { data: topTags },
     { data: allAiRatings },
   ] = await Promise.all([
     supabase.from("properties").select("id, name_en, country, prefecture, cover_image_url").eq("id", propertyId).single(),
@@ -45,17 +44,17 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
       .eq("property_id", propertyId)
       .order("created_at", { ascending: false })
       .limit(20),
-    supabase.from("story_tags")
-      .select("tag, story_id")
-      .in("story_id",
-        await supabase.from("travel_stories").select("id").eq("property_id", propertyId).limit(200)
-          .then(r => (r.data ?? []).map((s: { id: number }) => s.id))
-      ),
     supabase.from("travel_stories")
       .select("ai_rating")
       .eq("property_id", propertyId)
       .not("ai_rating", "is", null),
   ])
+
+  // Fetch story tags separately (guarded against empty story list)
+  const storyIds = (stories ?? []).map((s) => s.id)
+  const { data: topTags } = storyIds.length > 0
+    ? await supabase.from("story_tags").select("tag, story_id").in("story_id", storyIds.slice(0, 200))
+    : { data: [] }
 
   if (!property) notFound()
 
