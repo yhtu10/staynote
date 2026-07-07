@@ -244,9 +244,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                           </span>
                           <p style={{ fontSize: "10px", color: "#CCC", marginTop: "2px" }}>AI 評分</p>
                         </>
-                      ) : (
-                        <span style={{ color: "#DDD", fontSize: "13px" }}>★★★★★</span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   {title && (
