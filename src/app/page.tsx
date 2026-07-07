@@ -5,21 +5,27 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 
 const hints = [
-  { label: "親子 × 台南", text: "帶小孩去台南，想要飯店有親子設施，孩子第一次出遊" },
-  { label: "獨旅設計控", text: "獨旅，想住有設計感的飯店，不限城市，重視空間氛圍" },
-  { label: "情侶 × 溫泉", text: "情侶出遊，想去泡溫泉，第一次去日本，希望交通方便" },
-  { label: "朋友 × 京都", text: "和朋友去京都，想住有歷史感的地方，喜歡文青風格" },
-  { label: "台北", text: "台北" },
-  { label: "東京", text: "東京" },
-  { label: "首爾", text: "首爾" },
+  { label: "東京 × 設計旅店", text: "想在東京住一間有設計感的飯店，空間氛圍好，適合獨旅或情侶入住" },
+  { label: "北海道 × 溫泉", text: "想去北海道泡溫泉，享受大浴場和露天風呂，最好附近有美食" },
+  { label: "京都 × 傳統旅館", text: "想在京都住有歷史感的傳統旅館或町家，感受古都氛圍" },
+  { label: "沖繩 × 海灘度假", text: "想在沖繩住海邊的度假飯店，有泳池，適合家庭或情侶放鬆" },
+  { label: "大阪 × 美食早餐", text: "去大阪吃美食，想住在交通方便、附近多餐廳的飯店，早餐要好吃" },
+  { label: "峇里島 × 泳池別墅", text: "想去峇里島住有私人泳池的度假村，享受奢華熱帶假期" },
+  { label: "福岡 × 獨旅", text: "一個人去福岡，想住輕鬆方便的飯店，探索城市、吃拉麵" },
+  { label: "台北 × 設計旅宿", text: "台北週末小旅行，想住有設計感的精品旅店，不用出國也有質感" },
+  { label: "曼谷 × 屋頂泳池", text: "想在曼谷住有屋頂泳池的時髦飯店，享受熱帶都市假期" },
+  { label: "北陸 × 山景溫泉", text: "想去石川或富山泡溫泉，欣賞山景，感受日本傳統旅館文化" },
 ]
 
 export default function Home() {
   const [text, setText] = useState("")
   const [recording, setRecording] = useState(false)
   const [micSupported, setMicSupported] = useState(false)
+  const [micError, setMicError] = useState("")
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null)
+  const SRClassRef = useRef<any>(null)   // 存 class
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null) // 存當次 instance
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
 
@@ -29,28 +35,56 @@ export default function Home() {
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition
     if (SR) {
       setMicSupported(true)
-      const rec = new SR()
-      rec.lang = "zh-TW"
-      rec.continuous = true
-      rec.interimResults = true
-      rec.onresult = (e: { results: { length: number; [i: number]: { [j: number]: { transcript: string } } } }) => {
-        let t = ""
-        for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript
-        setText(t)
-      }
-      rec.onend = () => setRecording(false)
-      recognitionRef.current = rec
+      SRClassRef.current = SR  // 只存 class
     }
   }, [])
 
   function toggleMic() {
-    if (!recognitionRef.current) return
+    setMicError("")
     if (recording) {
-      recognitionRef.current.stop()
+      // 停止：呼叫當前 instance 的 stop()
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+        recognitionRef.current = null
+      }
       setRecording(false)
-    } else {
-      recognitionRef.current.start()
+      return
+    }
+    if (!SRClassRef.current) return
+    // 每次都建立全新 instance
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec = new (SRClassRef.current as any)()
+    recognitionRef.current = rec
+    rec.lang = "zh-TW"
+    rec.continuous = true
+    rec.interimResults = true
+    rec.onresult = (e: { results: { length: number; [i: number]: { [j: number]: { transcript: string } } } }) => {
+      let t = ""
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript
+      setText(t)
+      setMicError("")
+    }
+    rec.onend = () => {
+      recognitionRef.current = null
+      setRecording(false)
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      recognitionRef.current = null
+      setRecording(false)
+      if (e.error === "not-allowed") {
+        setMicError("請在 Chrome 設定中允許此網站使用麥克風")
+      } else if (e.error === "no-speech") {
+        setMicError("沒有偵測到聲音，請再試一次")
+      } else {
+        setMicError("語音輸入失敗：" + e.error)
+      }
+    }
+    try {
+      rec.start()
       setRecording(true)
+    } catch {
+      setMicError("語音輸入失敗，請重試")
     }
   }
 
@@ -123,8 +157,8 @@ export default function Home() {
               >
                 {recording ? "■" : "🎙"}
               </button>
-              <span style={{ fontSize: "11px", color: "#BBB" }}>
-                {!micSupported ? "此瀏覽器不支援語音" : recording ? "錄音中，再按一次結束" : "語音輸入"}
+              <span style={{ fontSize: "11px", color: micError ? "#E55" : "#BBB" }}>
+                {micError || (!micSupported ? "此瀏覽器不支援語音" : recording ? "錄音中，再按一次結束" : "語音輸入")}
               </span>
             </div>
             <button
@@ -162,9 +196,23 @@ export default function Home() {
           ))}
         </div>
 
-        <p style={{ textAlign: "center", fontSize: "11px", color: "#CCC", marginTop: "40px" }}>
+        <p style={{ textAlign: "center", fontSize: "11px", color: "#CCC", marginTop: "40px", marginBottom: "32px" }}>
           來自 14,000+ 則旅人真實評論
         </p>
+
+        {/* Write review CTA */}
+        <div style={{ background: "white", border: "1px solid #EBEBEB", borderRadius: "16px", padding: "22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+          <div>
+            <p style={{ fontSize: "14px", fontWeight: 700, color: "#111", marginBottom: "4px" }}>住過哪裡？說說你的真實感受</p>
+            <p style={{ fontSize: "12px", color: "#AAA" }}>分享評論，幫助其他旅人做更好的選擇</p>
+          </div>
+          <Link
+            href="/write"
+            style={{ background: "#111", color: "white", fontSize: "13px", fontWeight: 600, padding: "10px 20px", borderRadius: "20px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            寫評論 →
+          </Link>
+        </div>
 
       </main>
 
