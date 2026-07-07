@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSession, signIn } from 'next-auth/react'
-import { HOTELS } from '@/data/hotels'
+import { useRouter } from 'next/navigation'
 
 // --- Web Speech API types ---
 interface ISpeechRecognition extends EventTarget {
@@ -159,14 +159,20 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
+type HotelSuggestion = { id: number; name_en: string; prefecture: string; country: string }
+
 // --- Main page ---
 export default function WritePage() {
   const { data: session, status } = useSession()
+  const router = useRouter()
 
   // Hotel search
   const [hotelQuery, setHotelQuery] = useState('')
-  const [selectedHotel, setSelectedHotel] = useState('')
+  const [selectedHotel, setSelectedHotel] = useState<{ id: number; name: string } | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [hotelSuggestions, setHotelSuggestions] = useState<HotelSuggestion[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
   // Input mode
   const [inputMode, setInputMode] = useState<'choose' | 'voice' | 'manual'>('choose')
@@ -196,10 +202,14 @@ export default function WritePage() {
   const [rating, setRating] = useState(0)
   const [recommendFor, setRecommendFor] = useState<GuestType[]>([])
 
-  const hotelSuggestions = useMemo(() => {
-    if (hotelQuery.length < 2) return []
-    const q = hotelQuery.toLowerCase()
-    return HOTELS.filter((h) => h.name.toLowerCase().includes(q)).slice(0, 8)
+  useEffect(() => {
+    if (hotelQuery.length < 2) { setHotelSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/hotels/search?q=${encodeURIComponent(hotelQuery)}`)
+      const data = await res.json()
+      setHotelSuggestions(data)
+    }, 300)
+    return () => clearTimeout(timer)
   }, [hotelQuery])
 
   const applyParsed = useCallback((parsed: ParsedInfo) => {
@@ -221,27 +231,23 @@ export default function WritePage() {
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
-    let finalText = ''
+    let latestText = ''
 
     recognition.onstart = () => setIsListening(true)
     recognition.onend = () => {
       setIsListening(false)
-      if (finalText) {
-        setTranscript(finalText)
-        setParsedInfo(parseTranscript(finalText))
+      if (latestText) {
+        setTranscript(latestText)
+        setParsedInfo(parseTranscript(latestText))
       }
     }
     recognition.onresult = (e: ISpeechRecognitionEvent) => {
-      let interim = ''
-      finalText = ''
+      let combined = ''
       for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          finalText += e.results[i][0].transcript
-        } else {
-          interim += e.results[i][0].transcript
-        }
+        combined += e.results[i][0].transcript
       }
-      setTranscript(finalText + interim)
+      latestText = combined
+      setTranscript(combined)
     }
     recognition.onerror = () => setIsListening(false)
 
@@ -267,6 +273,35 @@ export default function WritePage() {
 
   const toggleRecommend = (g: GuestType) =>
     setRecommendFor((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])
+
+  const handleSubmit = async () => {
+    if (!selectedHotel || !rating || positive.length < 50) return
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const res = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_id: selectedHotel.id,
+          rating,
+          positive,
+          negative: noNegative ? '' : negative,
+          check_in_month: checkInMonth,
+          purposes,
+          bed_type: bedType,
+          has_kids: hasKids,
+          recommend_for: recommendFor,
+        }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
+      router.push(`/hotel/${selectedHotel.id}?reviewed=1`)
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : '發生錯誤，請再試一次')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const monthOptions = Array.from({ length: 18 }, (_, i) => {
     const d = new Date()
@@ -332,7 +367,7 @@ export default function WritePage() {
             <input
               type="text"
               value={hotelQuery}
-              onChange={(e) => { setHotelQuery(e.target.value); setSelectedHotel(''); setShowSuggestions(true) }}
+              onChange={(e) => { setHotelQuery(e.target.value); setSelectedHotel(null); setShowSuggestions(true) }}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
               placeholder="輸入飯店名稱搜尋…"
@@ -344,25 +379,18 @@ export default function WritePage() {
                   <button
                     key={h.id}
                     type="button"
-                    onMouseDown={() => { setHotelQuery(h.name); setSelectedHotel(h.name); setShowSuggestions(false) }}
+                    onMouseDown={() => { setHotelQuery(h.name_en); setSelectedHotel({ id: h.id, name: h.name_en }); setShowSuggestions(false) }}
                     className="w-full text-left px-4 py-3 text-sm text-neutral-700 hover:bg-neutral-50 border-b border-neutral-100 last:border-0"
                   >
-                    <span>{h.name}</span>
+                    <span>{h.name_en}</span>
                     <span className="text-xs text-neutral-400 ml-2">{h.prefecture}, {h.country}</span>
                   </button>
                 ))}
-                <button
-                  type="button"
-                  onMouseDown={() => { setSelectedHotel(hotelQuery); setShowSuggestions(false) }}
-                  className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50"
-                >
-                  ＋ 新增「{hotelQuery}」
-                </button>
               </div>
             )}
           </div>
           {selectedHotel && (
-            <p className="text-sm text-emerald-600 mt-2">✓ 已選擇：{selectedHotel}</p>
+            <p className="text-sm text-emerald-600 mt-2">✓ 已選擇：{selectedHotel.name}</p>
           )}
         </section>
 
@@ -700,11 +728,16 @@ export default function WritePage() {
                   發佈後獲得 <strong>50 點</strong>旅人積分，附照片再 <strong>+5 點</strong>，可折抵 KBK exchange 訂房。
                 </span>
               </div>
+              {submitError && (
+                <p className="text-sm text-red-500 text-center mb-2">{submitError}</p>
+              )}
               <button
                 type="button"
-                className="w-full bg-neutral-900 text-white text-sm font-medium py-3.5 rounded-full hover:bg-neutral-700 transition-colors"
+                onClick={handleSubmit}
+                disabled={submitting || !selectedHotel || !rating || positive.length < 50}
+                className="w-full bg-neutral-900 text-white text-sm font-medium py-3.5 rounded-full hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                發佈評論
+                {submitting ? '發佈中…' : '發佈評論'}
               </button>
               <p className="text-xs text-neutral-400 text-center mt-3">
                 發佈前會經過人工審核，通常 24 小時內完成
