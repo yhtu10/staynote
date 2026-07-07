@@ -266,7 +266,8 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     const topStoryId = propScores.get(propId)!.topStoryId
     const topStory = storyMap.get(topStoryId)
     if (!topStory) continue
-    finalResults.push({ property, stories: [{ ...topStory, ai_rating: topStory.ai_rating ?? null }], tags: tagsByStory.get(topStoryId)?.slice(0, 3) ?? [] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    finalResults.push({ property, stories: [{ ...topStory, ai_rating: (topStory as any).ai_rating ?? null }], tags: tagsByStory.get(topStoryId)?.slice(0, 3) ?? [] })
   }
   return { results: finalResults, isFallback }
 }
