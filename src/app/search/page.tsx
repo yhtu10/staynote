@@ -1,11 +1,14 @@
 import Link from "next/link"
-import Image from "next/image"
 import { createClient } from "@supabase/supabase-js"
+import OpenAI from "openai"
+import SearchResults from "@/components/SearchResults"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SECRET_KEY!
 )
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 async function fetchHafHImageUrl(storyId: number, hafhUrl: string): Promise<string | null> {
   try {
@@ -66,15 +69,6 @@ const TAG_MAP: Record<string, string[]> = {
   "近車站": ["Near Station"],
   "交通": ["Near Station"],
   "機場": ["Near Airport"],
-  "台南": ["台南"],
-  "台北": ["台北"],
-  "京都": ["京都"],
-  "東京": ["東京"],
-  "大阪": ["大阪"],
-  "沖繩": ["沖繩"],
-  "九州": ["九州"],
-  "北海道": ["北海道"],
-  "首爾": ["首爾"],
 }
 
 const COUNTRY_MAP: Record<string, string> = {
@@ -127,89 +121,275 @@ function extractPrefecture(query: string): string | null {
   return null
 }
 
-async function searchHotels(query: string) {
-  const tags = extractTags(query)
+async function searchHotels(query: string): Promise<{ results: SearchResult[]; isFallback: boolean }> {
   const country = extractCountry(query)
   const prefecture = extractPrefecture(query)
-  const areaKeyword = AREA_KEYWORDS.find((kw) => query.includes(kw)) ?? null
 
-  // Step 1: get matching property IDs (filter by location)
-  let propQuery = supabase
-    .from("properties")
-    .select("id, name_en, country, prefecture")
-    .limit(500)
-
-  if (prefecture) {
-    propQuery = propQuery.eq("prefecture", prefecture)
-  } else if (country) {
-    propQuery = propQuery.eq("country", country)
+  // Step 1: embed the query
+  let queryEmbedding: number[] | null = null
+  try {
+    const embRes = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: query,
+    })
+    queryEmbedding = embRes.data[0].embedding
+  } catch {
+    // fallback to keyword search if OpenAI fails
   }
 
-  const { data: properties } = await propQuery
-  if (!properties || properties.length === 0) return []
+  let storyRows: { story_id: number; property_id: number; similarity: number }[] = []
 
-  const propIds = properties.map((p) => p.id)
-
-  // Step 2: collect story IDs — from tags and/or area text search
-  const storyIdSets: Set<number>[] = []
-
-  if (tags.length > 0) {
-    const { data: tagData } = await supabase
-      .from("story_tags")
-      .select("story_id")
-      .in("tag", tags)
-      .limit(500)
-    if (tagData) storyIdSets.push(new Set(tagData.map((r) => r.story_id)))
+  if (queryEmbedding) {
+    // Step 2a: semantic vector search
+    const { data: matchData } = await supabase.rpc("match_stories", {
+      query_embedding: queryEmbedding,
+      match_count: 120,
+    })
+    storyRows = (matchData ?? []) as typeof storyRows
   }
 
-  if (areaKeyword) {
-    // text search in story descriptions for the area name
-    const { data: textData } = await supabase
-      .from("travel_stories")
-      .select("id")
-      .in("property_id", propIds)
-      .or(`zh_tw_description.ilike.%${areaKeyword}%,description.ilike.%${areaKeyword}%,zh_tw_title.ilike.%${areaKeyword}%,title.ilike.%${areaKeyword}%`)
-      .limit(300)
-    if (textData) storyIdSets.push(new Set(textData.map((r) => r.id)))
-  }
-
-  // Step 3: get stories — intersect sets if both exist, else use whichever we have
-  let storiesQuery = supabase
-    .from("travel_stories")
-    .select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url")
-    .in("property_id", propIds)
-    .not("property_id", "is", null)
-    .order("likes_count", { ascending: false })
-    .limit(100)
-
-  if (storyIdSets.length === 2) {
-    // intersect: stories matching BOTH tags and area
-    const intersection = [...storyIdSets[0]].filter((id) => storyIdSets[1].has(id))
-    const finalIds = intersection.length > 0 ? intersection : [...storyIdSets[1]]
-    storiesQuery = storiesQuery.in("id", finalIds)
-  } else if (storyIdSets.length === 1) {
-    storiesQuery = storiesQuery.in("id", [...storyIdSets[0]])
-  }
-
-  const { data: stories } = await storiesQuery
-  if (!stories || stories.length === 0) return []
-
-  const propMap = new Map(properties.map((p) => [p.id, p]))
-
-  const grouped = new Map<number, { property: { id: number; name_en: string; country: string; prefecture: string }; stories: typeof stories }>()
-  for (const story of stories) {
-    const prop = propMap.get(story.property_id)
-    if (!prop) continue
-    if (!grouped.has(story.property_id)) {
-      grouped.set(story.property_id, { property: prop, stories: [] })
+  // Step 2b: if location specified, filter by property location
+  // 使用 JOIN 而不是先 fetch propIds（避免數百個 ID 造成 URL 過長）
+  if (storyRows.length > 0 && (prefecture || country)) {
+    // 只保留語意結果裡符合地點的 property_id
+    // 先 fetch 前 200 個地點 property IDs 來過濾語意結果
+    let propQuery = supabase.from("properties").select("id").limit(200)
+    if (prefecture) propQuery = propQuery.eq("prefecture", prefecture)
+    else if (country) propQuery = propQuery.eq("country", country)
+    const { data: locationProps } = await propQuery
+    const locationPropIds = new Set((locationProps ?? []).map((p) => p.id))
+    if (locationPropIds.size > 0) {
+      storyRows = storyRows.filter(r => locationPropIds.has(r.property_id))
     }
-    grouped.get(story.property_id)!.stories.push(story)
   }
 
-  return Array.from(grouped.values()).slice(0, 8)
+  // Step 3: fallback keyword search if semantic returned nothing
+  if (storyRows.length === 0) {
+    const tags = extractTags(query)
+    const areaKeyword = AREA_KEYWORDS.find((kw) => query.includes(kw)) ?? null
+
+    // 先嘗試加地點限制：用 JOIN（properties!inner）避免 IN 子句過長
+    if (prefecture || country) {
+      // 先試「地點 + tags」
+      if (tags.length > 0) {
+        const { data: tagData } = await supabase.from("story_tags").select("story_id").in("tag", tags).limit(500)
+        const tagIds = (tagData ?? []).map(r => r.story_id)
+        if (tagIds.length > 0) {
+          let q = supabase
+            .from("travel_stories")
+            .select("id, property_id, likes_count, properties!inner(prefecture, country)")
+            .in("id", tagIds)
+            .order("likes_count", { ascending: false })
+            .limit(120)
+          if (prefecture) q = (q as any).eq("properties.prefecture", prefecture)
+          else if (country) q = (q as any).eq("properties.country", country)
+          const { data: taggedStories } = await q
+          storyRows = (taggedStories ?? []).map((s: any) => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+        }
+      }
+
+      // 若 tag 交集空，退而求其次：只用地點，取按讚最多的故事
+      if (storyRows.length === 0) {
+        let q = supabase
+          .from("travel_stories")
+          .select("id, property_id, likes_count, properties!inner(prefecture, country)")
+          .order("likes_count", { ascending: false })
+          .limit(120)
+        if (prefecture) q = (q as any).eq("properties.prefecture", prefecture)
+        else if (country) q = (q as any).eq("properties.country", country)
+        if (areaKeyword) q = q.or(`zh_tw_description.ilike.%${areaKeyword}%,description.ilike.%${areaKeyword}%`)
+        const { data: locationStories } = await q
+        storyRows = (locationStories ?? []).map((s: any) => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+      }
+    }
+
+    // 仍然空：不限地點，只用 tags 搜
+    if (storyRows.length === 0 && tags.length > 0) {
+      const { data: tagData } = await supabase.from("story_tags").select("story_id").in("tag", tags).limit(300)
+      const tagIds = (tagData ?? []).map(r => r.story_id)
+      if (tagIds.length > 0) {
+        const { data: tagStories } = await supabase
+          .from("travel_stories").select("id, property_id, likes_count")
+          .in("id", tagIds).order("likes_count", { ascending: false }).limit(120)
+        storyRows = (tagStories ?? []).map((s: any) => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+      }
+    }
+  }
+
+  // 語意搜尋有結果 = 精準；純關鍵字/地點 fallback = isFallback
+  const isFallback = storyRows.every(r => r.similarity === 0)
+  if (storyRows.length === 0) return { results: [], isFallback: true }
+
+  // Step 4: group by property, keep best similarity score per property
+  const propScores = new Map<number, { topStoryId: number; similarity: number }>()
+  for (const row of storyRows) {
+    const existing = propScores.get(row.property_id)
+    if (!existing || row.similarity > existing.similarity) {
+      propScores.set(row.property_id, { topStoryId: row.story_id, similarity: row.similarity })
+    }
+  }
+
+  // Sort properties by best similarity score
+  const sortedPropIds = [...propScores.entries()]
+    .sort((a, b) => b[1].similarity - a[1].similarity)
+    .slice(0, 60)
+    .map(([propId]) => propId)
+
+  // Step 5: fetch property info
+  const { data: properties } = await supabase
+    .from("properties")
+    .select("id, name_en, country, prefecture, cover_image_url")
+    .in("id", sortedPropIds)
+
+  const propMap = new Map((properties ?? []).map(p => [p.id, p]))
+
+  // Step 6: fetch story details for top story per property
+  const topStoryIds = sortedPropIds.map(id => propScores.get(id)!.topStoryId)
+  const { data: stories } = await supabase
+    .from("travel_stories")
+    .select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email")
+    .in("id", topStoryIds)
+
+  const storyMap = new Map((stories ?? []).map(s => [s.id, s]))
+
+  // Step 7: fetch tags for top stories
+  const { data: tagRows } = await supabase
+    .from("story_tags")
+    .select("story_id, tag")
+    .in("story_id", topStoryIds)
+    .limit(200)
+
+  const tagsByStory = new Map<number, string[]>()
+  for (const row of tagRows ?? []) {
+    if (!tagsByStory.has(row.story_id)) tagsByStory.set(row.story_id, [])
+    tagsByStory.get(row.story_id)!.push(row.tag)
+  }
+
+  // Step 8: assemble final results in similarity order
+  const finalResults: SearchResult[] = []
+  for (const propId of sortedPropIds) {
+    const property = propMap.get(propId)
+    if (!property) continue
+    const topStoryId = propScores.get(propId)!.topStoryId
+    const topStory = storyMap.get(topStoryId)
+    if (!topStory) continue
+    finalResults.push({ property, stories: [topStory], tags: tagsByStory.get(topStoryId)?.slice(0, 3) ?? [] })
+  }
+  return { results: finalResults, isFallback }
 }
 
-const CARD_COLORS = ["#EEF0FF", "#FFF8EE", "#F0FFF4", "#FFF0F5", "#F0F8FF", "#FFFBEE"]
+// 從查詢中擷取有意義的關鍵字供顯示
+function extractKeywords(query: string): string[] {
+  const found = new Set<string>()
+  // 旅伴 / 設施 tags
+  for (const keyword of Object.keys(TAG_MAP)) {
+    if (query.includes(keyword)) found.add(keyword)
+  }
+  // 地點
+  for (const keyword of Object.keys(PREFECTURE_MAP)) {
+    if (query.includes(keyword)) found.add(keyword)
+  }
+  for (const keyword of Object.keys(COUNTRY_MAP)) {
+    if (query.includes(keyword)) found.add(keyword)
+  }
+  // area keywords
+  for (const keyword of AREA_KEYWORDS) {
+    if (query.includes(keyword)) found.add(keyword)
+  }
+  // 若什麼都沒找到，取前兩個 2 字以上的詞段（以中文標點或空白切分）
+  if (found.size === 0) {
+    const segments = query.split(/[\s，、,。！？\n]+/).filter(s => s.length >= 2).slice(0, 2)
+    segments.forEach(s => found.add(s))
+  }
+  return Array.from(found).slice(0, 4)
+}
+
+type StoryRowSimple = { story_id: number; property_id: number; similarity: number }
+type SearchResult = { property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null }[]; tags: string[] }
+
+async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise<SearchResult[]> {
+  const propScores = new Map<number, { topStoryId: number; similarity: number }>()
+  for (const row of storyRows) {
+    const ex = propScores.get(row.property_id)
+    if (!ex || row.similarity > ex.similarity) propScores.set(row.property_id, { topStoryId: row.story_id, similarity: row.similarity })
+  }
+  const sortedPropIds = [...propScores.entries()]
+    .sort((a, b) => b[1].similarity - a[1].similarity)
+    .slice(0, limit).map(([id]) => id)
+  if (sortedPropIds.length === 0) return []
+
+  const topStoryIds = sortedPropIds.map(id => propScores.get(id)!.topStoryId)
+  const [{ data: properties }, { data: stories }, { data: tagRows }] = await Promise.all([
+    supabase.from("properties").select("id, name_en, country, prefecture, cover_image_url").in("id", sortedPropIds),
+    supabase.from("travel_stories").select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email").in("id", topStoryIds),
+    supabase.from("story_tags").select("story_id, tag").in("story_id", topStoryIds).limit(100),
+  ])
+
+  const propMap = new Map((properties ?? []).map(p => [p.id, p]))
+  const storyMap = new Map((stories ?? []).map(s => [s.id, s]))
+  const tagsByStory = new Map<number, string[]>()
+  for (const row of tagRows ?? []) {
+    if (!tagsByStory.has(row.story_id)) tagsByStory.set(row.story_id, [])
+    tagsByStory.get(row.story_id)!.push(row.tag)
+  }
+
+  const out: SearchResult[] = []
+  for (const propId of sortedPropIds) {
+    const property = propMap.get(propId)
+    const topStory = storyMap.get(propScores.get(propId)!.topStoryId)
+    if (!property || !topStory) continue
+    out.push({ property, stories: [topStory], tags: tagsByStory.get(topStory.id)?.slice(0, 3) ?? [] })
+  }
+  return out
+}
+
+// 不限地點的語意 fallback，保證一定有結果
+async function searchFallback(query: string, prefecture?: string | null, country?: string | null): Promise<SearchResult[]> {
+  // 先試不限地點的語意搜尋
+  try {
+    const embRes = await openai.embeddings.create({ model: "text-embedding-3-small", input: query })
+    const { data: matchData } = await supabase.rpc("match_stories", {
+      query_embedding: embRes.data[0].embedding,
+      match_count: 40,
+    })
+    if (matchData && matchData.length > 0) {
+      const results = await assembleResults(matchData as StoryRowSimple[], 20)
+      if (results.length > 0) return results
+    }
+  } catch { /* 繼續到關鍵字保底 */ }
+
+  // 純關鍵字保底：tags 全域搜
+  const tags = extractTags(query)
+  if (tags.length > 0) {
+    const { data: tagData } = await supabase.from("story_tags").select("story_id").in("tag", tags).limit(300)
+    const tagIds = (tagData ?? []).map(r => r.story_id)
+    if (tagIds.length > 0) {
+      const { data: tagStories } = await supabase
+        .from("travel_stories").select("id, property_id, likes_count")
+        .in("id", tagIds).order("likes_count", { ascending: false }).limit(60)
+      if (tagStories && tagStories.length > 0) {
+        const results = await assembleResults(tagStories.map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 })), 20)
+        if (results.length > 0) return results
+      }
+    }
+  }
+
+  // 終極保底：回傳指定地點（或全域）按讚最多的熱門旅宿
+  let q = supabase.from("travel_stories")
+    .select("id, property_id, likes_count" + (prefecture || country ? ", properties!inner(prefecture, country)" : ""))
+    .order("likes_count", { ascending: false })
+    .limit(80)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (prefecture) q = (q as any).eq("properties.prefecture", prefecture)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  else if (country) q = (q as any).eq("properties.country", country)
+  const { data: popularStories } = await q
+  if (popularStories && popularStories.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return assembleResults((popularStories as any[]).map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 })), 20)
+  }
+  return []
+}
 
 export default async function SearchPage({
   searchParams,
@@ -218,17 +398,15 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams
   const query = q ?? ""
-  const results = query ? await searchHotels(query) : []
+  const { results, isFallback } = query ? await searchHotels(query) : { results: [], isFallback: false }
+  const keywords = query ? extractKeywords(query) : []
+  const prefecture = query ? extractPrefecture(query) : null
+  const country = query ? extractCountry(query) : null
 
-  // for each result, resolve image URL (use cached or fetch from HafH)
-  const imageUrls = await Promise.all(
-    results.map(async ({ stories }) => {
-      const top = stories[0]
-      if (top.cover_image_url) return top.cover_image_url
-      if (!top.hafh_url) return null
-      return await fetchHafHImageUrl(top.id, top.hafh_url)
-    })
-  )
+  // 若完全空結果，跑不限地點的 fallback（傳地點讓 fallback 優先找該地點熱門旅宿）
+  const extraFallback = results.length === 0 && query ? await searchFallback(query, prefecture, country) : []
+  const showFallbackMsg = (isFallback && results.length > 0) || (results.length === 0 && extraFallback.length > 0)
+  const displayResults = results.length > 0 ? results : extraFallback
 
   return (
     <div className="min-h-screen" style={{ background: "#F5F5F5" }}>
@@ -247,70 +425,29 @@ export default async function SearchPage({
           <p style={{ fontSize: "14px", color: "#111", lineHeight: 1.7 }}>{query}</p>
         </div>
 
-        {results.length === 0 ? (
+        {displayResults.length > 0 ? (
+          <>
+            {showFallbackMsg && keywords.length > 0 && (
+              <div style={{ background: "#FFFBF0", border: "1px solid #FFE8A0", borderRadius: "16px", padding: "16px 20px", marginBottom: "20px" }}>
+                <p style={{ fontSize: "13px", color: "#888", lineHeight: 1.8 }}>
+                  根據你的輸入我們暫時無法找到最符合的內容，但依照
+                  {keywords.map((kw, i) => (
+                    <span key={kw}>
+                      {i > 0 && "、"}
+                      <span style={{ fontWeight: 600, color: "#111" }}>「{kw}」</span>
+                    </span>
+                  ))}
+                  ，我們有以下的推薦：
+                </p>
+              </div>
+            )}
+            <SearchResults results={displayResults} />
+          </>
+        ) : (
           <div style={{ textAlign: "center", padding: "60px 0" }}>
             <p style={{ fontSize: "15px", color: "#888", marginBottom: "8px" }}>找不到符合的旅宿</p>
             <p style={{ fontSize: "13px", color: "#BBB" }}>試試換個關鍵字，例如加上城市或旅伴描述</p>
           </div>
-        ) : (
-          <>
-            <p style={{ fontSize: "11px", color: "#AAA", marginBottom: "16px", letterSpacing: "0.06em" }}>
-              找到 {results.length} 間旅宿
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "14px" }}>
-              {results.map(({ property, stories }, i) => {
-                const topStory = stories[0]
-                const displayDesc = topStory.zh_tw_description || topStory.description || ""
-                const excerpt = displayDesc.length > 100 ? displayDesc.slice(0, 100) + "…" : displayDesc
-                const bg = CARD_COLORS[i % CARD_COLORS.length]
-                const imgUrl = imageUrls[i]
-
-                return (
-                  <Link
-                    key={property.id}
-                    href={`/hotel/${property.id}`}
-                    style={{ background: "white", border: "1px solid #EBEBEB", borderRadius: "16px", overflow: "hidden", textDecoration: "none", display: "block" }}
-                  >
-                    {/* Image */}
-                    <div style={{ height: "130px", overflow: "hidden", position: "relative", background: bg }}>
-                      {imgUrl ? (
-                        <Image
-                          src={imgUrl}
-                          alt={property.name_en}
-                          fill
-                          style={{ objectFit: "cover" }}
-                          unoptimized
-                        />
-                      ) : (
-                        <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "32px" }}>🏨</div>
-                      )}
-                    </div>
-
-                    <div style={{ padding: "14px 14px 16px" }}>
-                      <span style={{ display: "inline-block", fontSize: "10px", fontWeight: 600, color: "#4B7BF5", background: "#EEF2FF", borderRadius: "10px", padding: "2px 8px", marginBottom: "8px" }}>
-                        來自 HafH
-                      </span>
-                      <p style={{ fontSize: "15px", fontWeight: 700, color: "#111", marginBottom: "3px", lineHeight: 1.4 }}>
-                        {property.name_en}
-                      </p>
-                      <p style={{ fontSize: "11px", color: "#AAA", marginBottom: "10px" }}>
-                        {property.prefecture} · {property.country}
-                      </p>
-                      {excerpt && (
-                        <p style={{ fontSize: "12px", color: "#555", lineHeight: 1.7, marginBottom: "12px" }}>
-                          「{excerpt}」
-                        </p>
-                      )}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ color: "#F5A623", fontSize: "13px" }}>★★★★★</span>
-                        <span style={{ fontSize: "11px", color: "#AAA" }}>{stories.length} 則評論</span>
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </>
         )}
       </main>
 
