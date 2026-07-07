@@ -1,7 +1,8 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
-import HotelCardInteractive, { avatarBg, type CardData } from "@/components/HotelCardInteractive"
+import HotelCardInteractive from "@/components/HotelCardInteractive"
+import { avatarBg, type CardData } from "@/lib/card-utils"
 
 export const dynamic = "force-dynamic"
 
