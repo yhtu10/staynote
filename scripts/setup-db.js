@@ -2,7 +2,7 @@ const { createClient } = require('@supabase/supabase-js')
 
 const supabase = createClient(
   'https://dlfnlihezsmbdpsmnker.supabase.co',
-  'sb_secret_F2cIaQ7WPgl90MvJ3QLyQg_DOfdWcuP'
+  process.env.SUPABASE_SECRET_KEY
 )
 
 async function setupSchema() {
