@@ -278,29 +278,48 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   return { results: finalResults, isFallback }
 }
 
-// 從查詢中擷取有意義的關鍵字供顯示
+// 旅遊描述常見詞（不在 TAG_MAP 裡但值得顯示給用戶）
+const STYLE_KEYWORDS = [
+  "傳統旅館", "傳統", "町家", "歷史感", "歷史", "古都", "設計感", "文青", "奢華", "精品",
+  "度假村", "渡假村", "民宿", "旅館", "別墅", "溫泉旅館", "大浴場", "露天風呂",
+  "海景", "山景", "夜景", "泳池", "景觀", "私人", "寧靜", "放空", "蜜月",
+  "美食", "早餐", "交通方便", "近車站", "市中心",
+]
+
+// 從查詢中擷取有意義的關鍵字供顯示給用戶
 function extractKeywords(query: string): string[] {
   const found = new Set<string>()
-  // 旅伴 / 設施 tags
-  for (const keyword of Object.keys(TAG_MAP)) {
-    if (query.includes(keyword)) found.add(keyword)
-  }
-  // 地點
+
+  // 1. 地點（最重要，優先放前面）
   for (const keyword of Object.keys(PREFECTURE_MAP)) {
     if (query.includes(keyword)) found.add(keyword)
   }
   for (const keyword of Object.keys(COUNTRY_MAP)) {
     if (query.includes(keyword)) found.add(keyword)
   }
-  // area keywords
   for (const keyword of AREA_KEYWORDS) {
     if (query.includes(keyword)) found.add(keyword)
   }
-  // 若什麼都沒找到，取前兩個 2 字以上的詞段（以中文標點或空白切分）
+
+  // 2. 旅遊風格描述詞（比 TAG_MAP 更貼近用戶語言）
+  for (const keyword of STYLE_KEYWORDS) {
+    if (query.includes(keyword)) found.add(keyword)
+  }
+
+  // 3. TAG_MAP 旅伴 / 設施
+  for (const keyword of Object.keys(TAG_MAP)) {
+    if (query.includes(keyword)) found.add(keyword)
+  }
+
+  // 4. 若什麼都沒找到，從句子中切出有意義的片段（2-4 字）
   if (found.size === 0) {
-    const segments = query.split(/[\s，、,。！？\n]+/).filter(s => s.length >= 2).slice(0, 2)
+    const skipChars = /^[想去在住有的或我也很都但以可能這那種些其不限交通方便一次出遊旅行]+$/
+    const segments = query.split(/[\s，、,。！？\n～…]+/)
+      .filter(s => s.length >= 2 && s.length <= 6 && !skipChars.test(s))
+      .slice(0, 3)
     segments.forEach(s => found.add(s))
   }
+
   return Array.from(found).slice(0, 4)
 }
 
@@ -427,17 +446,17 @@ export default async function SearchPage({
 
         {displayResults.length > 0 ? (
           <>
-            {showFallbackMsg && keywords.length > 0 && (
+            {showFallbackMsg && (
               <div style={{ background: "#FFFBF0", border: "1px solid #FFE8A0", borderRadius: "16px", padding: "16px 20px", marginBottom: "20px" }}>
-                <p style={{ fontSize: "13px", color: "#888", lineHeight: 1.8 }}>
-                  根據你的輸入我們暫時無法找到最符合的內容，但依照
-                  {keywords.map((kw, i) => (
+                <p style={{ fontSize: "13px", color: "#666", lineHeight: 1.8 }}>
+                  沒有找到完全符合的旅宿，但根據你提到的
+                  {(keywords.length > 0 ? keywords : [query.slice(0, 10) + "…"]).map((kw, i) => (
                     <span key={kw}>
                       {i > 0 && "、"}
-                      <span style={{ fontWeight: 600, color: "#111" }}>「{kw}」</span>
+                      <span style={{ fontWeight: 700, color: "#111" }}>「{kw}」</span>
                     </span>
                   ))}
-                  ，我們有以下的推薦：
+                  ，以下是我們覺得最接近的推薦：
                 </p>
               </div>
             )}
