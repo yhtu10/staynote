@@ -317,7 +317,7 @@ function extractKeywords(query: string): string[] {
 }
 
 type StoryRowSimple = { story_id: number; property_id: number; similarity: number }
-type SearchResult = { property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null }[]; tags: string[] }
+type SearchResult = { property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null; ai_rating: number | null }[]; tags: string[] }
 
 async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise<SearchResult[]> {
   const propScores = new Map<number, { topStoryId: number; similarity: number }>()
@@ -333,7 +333,7 @@ async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise
   const topStoryIds = sortedPropIds.map(id => propScores.get(id)!.topStoryId)
   const [{ data: properties }, { data: stories }, { data: tagRows }] = await Promise.all([
     supabase.from("properties").select("id, name_en, country, prefecture, cover_image_url").in("id", sortedPropIds),
-    supabase.from("travel_stories").select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email").in("id", topStoryIds),
+    supabase.from("travel_stories").select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email, ai_rating").in("id", topStoryIds),
     supabase.from("story_tags").select("story_id, tag").in("story_id", topStoryIds).limit(100),
   ])
 

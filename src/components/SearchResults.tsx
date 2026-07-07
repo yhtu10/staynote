@@ -16,6 +16,7 @@ type Result = {
     author_email: string | null
     likes_count: number | null
     cover_image_url?: string | null
+    ai_rating?: number | null
   }[]
   tags: string[]
   matchReason?: string | null
@@ -104,7 +105,13 @@ export default function SearchResults({ results }: { results: Result[] }) {
                   )}
 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ color: "#F5A623", fontSize: "12px" }}>★★★★★</span>
+                    {topStory.ai_rating ? (
+                      <span style={{ color: "#F5A623", fontSize: "12px" }}>
+                        {"★".repeat(topStory.ai_rating)}{"☆".repeat(5 - topStory.ai_rating)}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#DDD", fontSize: "12px" }}>☆☆☆☆☆</span>
+                    )}
                     <span style={{ fontSize: "10px", color: "#CCC" }}>@{authorRaw}</span>
                   </div>
               </div>
