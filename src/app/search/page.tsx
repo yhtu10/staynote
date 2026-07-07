@@ -148,11 +148,8 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     storyRows = (matchData ?? []) as typeof storyRows
   }
 
-  // Step 2b: if location specified, filter by property location
-  // 使用 JOIN 而不是先 fetch propIds（避免數百個 ID 造成 URL 過長）
+  // Step 2b: 依地點過濾語意結果（限制 200 個 ID，避免 URL 過長）
   if (storyRows.length > 0 && (prefecture || country)) {
-    // 只保留語意結果裡符合地點的 property_id
-    // 先 fetch 前 200 個地點 property IDs 來過濾語意結果
     let propQuery = supabase.from("properties").select("id").limit(200)
     if (prefecture) propQuery = propQuery.eq("prefecture", prefecture)
     else if (country) propQuery = propQuery.eq("country", country)
@@ -168,38 +165,34 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     const tags = extractTags(query)
     const areaKeyword = AREA_KEYWORDS.find((kw) => query.includes(kw)) ?? null
 
-    // 先嘗試加地點限制：用 JOIN（properties!inner）避免 IN 子句過長
+    // 先嘗試加地點限制（取 200 個 property ID，不會造成 URL 過長）
     if (prefecture || country) {
-      // 先試「地點 + tags」
-      if (tags.length > 0) {
-        const { data: tagData } = await supabase.from("story_tags").select("story_id").in("tag", tags).limit(500)
-        const tagIds = (tagData ?? []).map(r => r.story_id)
-        if (tagIds.length > 0) {
-          let q = supabase
-            .from("travel_stories")
-            .select("id, property_id, likes_count, properties!inner(prefecture, country)")
-            .in("id", tagIds)
-            .order("likes_count", { ascending: false })
-            .limit(120)
-          if (prefecture) q = (q as any).eq("properties.prefecture", prefecture)
-          else if (country) q = (q as any).eq("properties.country", country)
-          const { data: taggedStories } = await q
-          storyRows = (taggedStories ?? []).map((s: any) => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
-        }
-      }
+      let propQuery = supabase.from("properties").select("id").limit(200)
+      if (prefecture) propQuery = propQuery.eq("prefecture", prefecture)
+      else if (country) propQuery = propQuery.eq("country", country)
+      const { data: props } = await propQuery
+      const propIds = (props ?? []).map(p => p.id)
 
-      // 若 tag 交集空，退而求其次：只用地點，取按讚最多的故事
-      if (storyRows.length === 0) {
-        let q = supabase
-          .from("travel_stories")
-          .select("id, property_id, likes_count, properties!inner(prefecture, country)")
-          .order("likes_count", { ascending: false })
-          .limit(120)
-        if (prefecture) q = (q as any).eq("properties.prefecture", prefecture)
-        else if (country) q = (q as any).eq("properties.country", country)
-        if (areaKeyword) q = q.or(`zh_tw_description.ilike.%${areaKeyword}%,description.ilike.%${areaKeyword}%`)
-        const { data: locationStories } = await q
-        storyRows = (locationStories ?? []).map((s: any) => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+      if (propIds.length > 0) {
+        // 先試「地點 + tags」
+        if (tags.length > 0) {
+          const { data: tagData } = await supabase.from("story_tags").select("story_id").in("tag", tags).limit(500)
+          const tagIds = new Set((tagData ?? []).map(r => r.story_id))
+          const { data: taggedStories } = await supabase
+            .from("travel_stories").select("id, property_id, likes_count")
+            .in("property_id", propIds).in("id", [...tagIds])
+            .order("likes_count", { ascending: false }).limit(120)
+          storyRows = (taggedStories ?? []).map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+        }
+
+        // 若 tag 交集空，只用地點
+        if (storyRows.length === 0) {
+          let q = supabase.from("travel_stories").select("id, property_id, likes_count")
+            .in("property_id", propIds).order("likes_count", { ascending: false }).limit(120)
+          if (areaKeyword) q = q.or(`zh_tw_description.ilike.%${areaKeyword}%,description.ilike.%${areaKeyword}%`)
+          const { data: locationStories } = await q
+          storyRows = (locationStories ?? []).map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+        }
       }
     }
 
@@ -211,7 +204,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
         const { data: tagStories } = await supabase
           .from("travel_stories").select("id, property_id, likes_count")
           .in("id", tagIds).order("likes_count", { ascending: false }).limit(120)
-        storyRows = (tagStories ?? []).map((s: any) => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
+        storyRows = (tagStories ?? []).map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 }))
       }
     }
   }
@@ -394,18 +387,27 @@ async function searchFallback(query: string, prefecture?: string | null, country
   }
 
   // 終極保底：回傳指定地點（或全域）按讚最多的熱門旅宿
-  let q = supabase.from("travel_stories")
-    .select("id, property_id, likes_count" + (prefecture || country ? ", properties!inner(prefecture, country)" : ""))
-    .order("likes_count", { ascending: false })
-    .limit(80)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (prefecture) q = (q as any).eq("properties.prefecture", prefecture)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  else if (country) q = (q as any).eq("properties.country", country)
-  const { data: popularStories } = await q
-  if (popularStories && popularStories.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return assembleResults((popularStories as any[]).map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 })), 20)
+  if (prefecture || country) {
+    let propQuery = supabase.from("properties").select("id").limit(200)
+    if (prefecture) propQuery = propQuery.eq("prefecture", prefecture)
+    else if (country) propQuery = propQuery.eq("country", country)
+    const { data: locProps } = await propQuery
+    const locIds = (locProps ?? []).map(p => p.id)
+    if (locIds.length > 0) {
+      const { data: locStories } = await supabase
+        .from("travel_stories").select("id, property_id, likes_count")
+        .in("property_id", locIds).order("likes_count", { ascending: false }).limit(80)
+      if (locStories && locStories.length > 0) {
+        return assembleResults(locStories.map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 })), 20)
+      }
+    }
+  }
+  // 全域保底
+  const { data: globalStories } = await supabase
+    .from("travel_stories").select("id, property_id, likes_count")
+    .order("likes_count", { ascending: false }).limit(80)
+  if (globalStories && globalStories.length > 0) {
+    return assembleResults(globalStories.map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 })), 20)
   }
   return []
 }
