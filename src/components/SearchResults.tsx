@@ -11,6 +11,7 @@ type Result = {
     id: number
     zh_tw_description: string | null
     description: string | null
+    stay_description?: string | null
     zh_tw_title: string | null
     title: string | null
     author_email: string | null
@@ -28,11 +29,10 @@ const PAGE_SIZE = 20
 function extractReason(story: Result["stories"][0] | null, matchReason?: string | null): string {
   if (matchReason) return matchReason
   if (!story) return ""
-  const text = story.zh_tw_description || story.description || ""
-  if (!text) return ""
-  // Find the most "interesting" sentence (longer than 20 chars)
-  const sentences = text.split(/[。！？\n]/).map(s => s.trim()).filter(s => s.length > 20)
-  const best = sentences[0] ?? text
+  const combined = [story.stay_description, story.zh_tw_description || story.description].filter(Boolean).join(" ")
+  if (!combined) return ""
+  const sentences = combined.split(/[。！？\n]/).map(s => s.trim()).filter(s => s.length > 20)
+  const best = sentences[0] ?? combined
   return best.length > 75 ? best.slice(0, 75) + "…" : best
 }
 
