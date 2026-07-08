@@ -121,7 +121,7 @@ function extractPrefecture(query: string): string | null {
   return null
 }
 
-async function searchHotels(query: string): Promise<{ results: SearchResult[]; isFallback: boolean }> {
+async function searchHotels(query: string): Promise<{ results: SearchResult[]; isFallback: boolean; nameMatch?: { hotels: SearchResult[]; prefecture: string | null; country: string | null } }> {
   const country = extractCountry(query)
   const prefecture = extractPrefecture(query)
 
@@ -223,15 +223,22 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     }
   }
 
-  // 若語意/關鍵字都沒結果，但名稱比對有找到旅宿，直接用名稱結果
+  // 若語意/關鍵字都沒結果，但名稱比對有找到旅宿 → 回傳 nameMatch 專屬流程
   if (storyRows.length === 0 && nameMatchPropIds.length > 0) {
     const { data: nameProps } = await supabase
       .from("properties")
       .select("id, name_en, country, prefecture, cover_image_url")
       .in("id", nameMatchPropIds)
+    const hotels = (nameProps ?? []).map(p => ({ property: p, stories: [], tags: [] }))
+    const firstProp = nameProps?.[0]
     return {
-      results: (nameProps ?? []).map(p => ({ property: p, stories: [], tags: [] })),
+      results: [],
       isFallback: false,
+      nameMatch: {
+        hotels,
+        prefecture: firstProp?.prefecture ?? null,
+        country: firstProp?.country ?? null,
+      },
     }
   }
 
@@ -314,7 +321,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     finalResults.push({ property, stories: [{ ...topStory, ai_rating: (topStory as any).ai_rating ?? null }], tags: tagsByStory.get(topStoryId)?.slice(0, 3) ?? [] })
   }
-  return { results: finalResults, isFallback }
+  return { results: finalResults, isFallback, nameMatch: undefined }
 }
 
 // 旅遊描述常見詞（不在 TAG_MAP 裡但值得顯示給用戶）
@@ -465,15 +472,25 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams
   const query = q ?? ""
-  const { results, isFallback } = query ? await searchHotels(query) : { results: [], isFallback: false }
+  const { results, isFallback, nameMatch } = query ? await searchHotels(query) : { results: [], isFallback: false, nameMatch: undefined }
   const keywords = query ? extractKeywords(query) : []
   const prefecture = query ? extractPrefecture(query) : null
   const country = query ? extractCountry(query) : null
 
-  // 若完全空結果，跑不限地點的 fallback（傳地點讓 fallback 優先找該地點熱門旅宿）
-  const extraFallback = results.length === 0 && query ? await searchFallback(query, prefecture, country) : []
+  // 若完全空結果，跑不限地點的 fallback
+  const extraFallback = results.length === 0 && !nameMatch && query ? await searchFallback(query, prefecture, country) : []
   const showFallbackMsg = (isFallback && results.length > 0) || (results.length === 0 && extraFallback.length > 0)
   const displayResults = results.length > 0 ? results : extraFallback
+
+  // nameMatch 時，抓同地點其他旅宿（依 AI 評分）
+  let locationResults: SearchResult[] = []
+  const locationLabel = nameMatch?.prefecture ?? nameMatch?.country ?? null
+  if (nameMatch && locationLabel) {
+    const locFallback = await searchFallback("", nameMatch.prefecture, nameMatch.country)
+    // 排除已顯示的旅宿
+    const matchedIds = new Set(nameMatch.hotels.map(h => h.property.id))
+    locationResults = locFallback.filter(r => !matchedIds.has(r.property.id)).slice(0, 6)
+  }
 
   return (
     <div className="min-h-screen" style={{ background: "#F5F5F5" }}>
@@ -492,7 +509,27 @@ export default async function SearchPage({
           <p style={{ fontSize: "14px", color: "#111", lineHeight: 1.7 }}>{query}</p>
         </div>
 
-        {displayResults.length > 0 ? (
+        {/* nameMatch 專屬流程 */}
+        {nameMatch ? (
+          <>
+            <div style={{ background: "#F0F4FF", border: "1px solid #C7D7FF", borderRadius: "16px", padding: "16px 20px", marginBottom: "20px" }}>
+              <p style={{ fontSize: "13px", color: "#444", lineHeight: 1.8 }}>
+                很抱歉，我們不確定您具體希望規劃什麼樣的旅行，但猜想您可能是在搜尋以下這間旅宿：
+              </p>
+            </div>
+            <SearchResults results={nameMatch.hotels} />
+
+            {locationResults.length > 0 && locationLabel && (
+              <>
+                <div style={{ margin: "32px 0 16px", borderTop: "1px solid #EBEBEB", paddingTop: "28px" }}>
+                  <p style={{ fontSize: "13px", color: "#888", marginBottom: "4px" }}>您可能還想查找</p>
+                  <p style={{ fontSize: "17px", fontWeight: 700, color: "#111" }}>「{locationLabel}」相關的旅宿資訊</p>
+                </div>
+                <SearchResults results={locationResults} />
+              </>
+            )}
+          </>
+        ) : displayResults.length > 0 ? (
           <>
             {showFallbackMsg && (
               <div style={{ background: "#FFFBF0", border: "1px solid #FFE8A0", borderRadius: "16px", padding: "16px 20px", marginBottom: "20px" }}>
