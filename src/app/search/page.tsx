@@ -126,8 +126,9 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   const prefecture = extractPrefecture(query)
 
   // Step 0: 旅宿名稱直接比對（最高優先）
-  // 如果 query 像是旅宿名稱（非中文、無空格描述句），先查 name_en ilike
-  const looksLikeName = query.length >= 2 && /^[\w\s\-\.]+$/.test(query)
+  // 條件：沒有偵測到地名（country/prefecture），且 query 是英數字旅宿名稱格式
+  // 避免「東京」「大阪」等地名把名稱含地名的旅宿錯誤置頂
+  const looksLikeName = !country && !prefecture && query.length >= 2 && /^[\w\s\-\.\/]+$/.test(query)
   let nameMatchPropIds: number[] = []
   if (looksLikeName) {
     const { data: nameMatches } = await supabase

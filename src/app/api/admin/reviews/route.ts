@@ -33,10 +33,6 @@ export async function GET(req: NextRequest) {
     : { data: [] }
   const nameMap = new Map((properties ?? []).map(p => [p.id, p.name_en]))
 
-  // 計算每個 user+property 已有幾則評論（含所有狀態）
-  const userPropertyPairs = (reviews ?? []).map(r => `${r.user_id ?? r.author_email}::${r.property_id}`)
-  const uniquePairs = [...new Set(userPropertyPairs)]
-
   // 對每筆評論查詢該 user 對該 property 的歷史總數
   const reviewList = reviews ?? []
   const countMap = new Map<string, number>()
