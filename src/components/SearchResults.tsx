@@ -49,14 +49,14 @@ export default function SearchResults({ results }: { results: Result[] }) {
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {visible.map(({ property, stories, tags, matchReason }, i) => {
           const bg = CARD_COLORS[i % CARD_COLORS.length]
-          const topStory = stories[0]
+          const topStory = stories[0] ?? null
           const reason = extractReason(topStory, matchReason)
-          const authorRaw = topStory.author_email?.split("@")[0] ?? "旅人"
+          const authorRaw = topStory?.author_email?.split("@")[0] ?? "旅人"
 
           // 優先用非通用 OGP 的 property 圖，否則暫用 story 圖（皆為 HafH 上的照片）
           const propImg = property.cover_image_url && property.cover_image_url !== GENERIC_OGP
             ? property.cover_image_url : null
-          const displayImg = propImg ?? topStory.cover_image_url ?? null
+          const displayImg = propImg ?? topStory?.cover_image_url ?? null
 
           return (
             <Link
@@ -105,14 +105,14 @@ export default function SearchResults({ results }: { results: Result[] }) {
                   )}
 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    {topStory.ai_rating ? (
+                    {topStory?.ai_rating ? (
                       <span style={{ color: "#F5A623", fontSize: "12px" }}>
                         {"★".repeat(topStory.ai_rating)}{"☆".repeat(5 - topStory.ai_rating)}
                       </span>
                     ) : (
                       <span style={{ color: "#DDD", fontSize: "12px" }}>☆☆☆☆☆</span>
                     )}
-                    <span style={{ fontSize: "10px", color: "#CCC" }}>@{authorRaw}</span>
+                    {topStory && <span style={{ fontSize: "10px", color: "#CCC" }}>@{authorRaw}</span>}
                   </div>
               </div>
             </Link>
