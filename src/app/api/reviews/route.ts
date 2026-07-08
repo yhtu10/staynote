@@ -16,28 +16,36 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const { property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for } = body
+  const action: "draft" | "submit" = body.action ?? "submit"
 
-  if (!property_id || !rating || !positive) {
+  // 草稿不驗證；送審才驗證
+  if (action === "submit" && (!property_id || !rating || !positive || positive.length < 50)) {
     return NextResponse.json({ error: "缺少必填欄位" }, { status: 400 })
+  }
+  if (!property_id) {
+    return NextResponse.json({ error: "請選擇飯店" }, { status: 400 })
   }
 
   const userId = (session.user as { id?: string }).id ?? ""
+  const status = action === "draft" ? "draft" : "pending"
 
-  const { error } = await supabase.from("reviews").insert({
+  const { data, error } = await supabase.from("reviews").insert({
     property_id,
     user_id: userId,
     author_email: session.user.email,
     author_name: session.user.name ?? "",
-    rating,
-    positive,
+    rating: rating ?? null,
+    positive: positive ?? "",
     negative: negative ?? "",
-    check_in_month,
-    purposes,
-    bed_type,
-    has_kids,
-    recommend_for,
-  })
+    check_in_month: check_in_month ?? null,
+    purposes: purposes ?? [],
+    bed_type: bed_type ?? null,
+    has_kids: has_kids ?? false,
+    recommend_for: recommend_for ?? [],
+    status,
+    updated_at: new Date().toISOString(),
+  }).select("id").single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, id: data?.id, status })
 }

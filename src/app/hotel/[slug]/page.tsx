@@ -43,6 +43,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
     supabase.from("reviews")
       .select("id, user_id, author_name, author_email, rating, positive, negative, check_in_month, purposes, bed_type, recommend_for, created_at")
       .eq("property_id", propertyId)
+      .eq("status", "approved")
       .order("created_at", { ascending: false })
       .limit(20),
     supabase.from("travel_stories")

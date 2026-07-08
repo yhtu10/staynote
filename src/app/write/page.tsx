@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSession, signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 // --- Web Speech API types ---
 interface ISpeechRecognition extends EventTarget {
@@ -165,6 +165,8 @@ type HotelSuggestion = { id: number; name_en: string; prefecture: string; countr
 export default function WritePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get('edit') // 編輯模式：?edit=123
 
   // Hotel search
   const [hotelQuery, setHotelQuery] = useState('')
@@ -173,6 +175,9 @@ export default function WritePage() {
   const [hotelSuggestions, setHotelSuggestions] = useState<HotelSuggestion[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [savedDraftId, setSavedDraftId] = useState<number | null>(null)
+  const [lastSaved, setLastSaved] = useState<string | null>(null)
+  const [loadingDraft, setLoadingDraft] = useState(false)
 
   // Input mode
   const [inputMode, setInputMode] = useState<'choose' | 'voice' | 'manual'>('choose')
@@ -211,6 +216,40 @@ export default function WritePage() {
     }, 300)
     return () => clearTimeout(timer)
   }, [hotelQuery])
+
+  // 若 URL 有 ?edit=id，載入既有評論資料
+  useEffect(() => {
+    if (!editId || !session) return
+    setLoadingDraft(true)
+    fetch(`/api/reviews/${editId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return
+        setSavedDraftId(data.id)
+        setRating(data.rating ?? 0)
+        setPositive(data.positive ?? '')
+        setNegative(data.negative ?? '')
+        setCheckInMonth(data.check_in_month ?? '')
+        setPurposes(data.purposes ?? [])
+        setBedType(data.bed_type ?? '')
+        setHasKids(data.has_kids ?? false)
+        setRecommendFor(data.recommend_for ?? [])
+        if (data.property_id) {
+          // 查飯店名稱
+          fetch(`/api/hotels/search?id=${data.property_id}`)
+            .then(r => r.json())
+            .then(props => {
+              const p = Array.isArray(props) ? props[0] : props
+              if (p) setSelectedHotel({ id: p.id, name: p.name_en })
+            })
+        }
+        if (data.status === 'rejected') {
+          setSubmitError(`上次送審被退回：${data.rejection_reason ?? '請修改後重新送出'}`)
+        }
+      })
+      .finally(() => setLoadingDraft(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId, session])
 
   const applyParsed = useCallback((parsed: ParsedInfo) => {
     if (parsed.checkInMonth) setCheckInMonth(parsed.checkInMonth)
@@ -274,28 +313,58 @@ export default function WritePage() {
   const toggleRecommend = (g: GuestType) =>
     setRecommendFor((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])
 
+  const buildPayload = (action: 'draft' | 'submit') => ({
+    property_id: selectedHotel?.id,
+    rating: rating || null,
+    positive,
+    negative: noNegative ? '' : negative,
+    check_in_month: checkInMonth || null,
+    purposes,
+    bed_type: bedType || null,
+    has_kids: hasKids,
+    recommend_for: recommendFor,
+    action,
+  })
+
+  const saveDraft = async () => {
+    if (!selectedHotel) { setSubmitError('請先選擇飯店'); return }
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const currentId = savedDraftId
+      const url = currentId ? `/api/reviews/${currentId}` : '/api/reviews'
+      const method = currentId ? 'PATCH' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload('draft')),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error)
+      if (!currentId && d.id) setSavedDraftId(d.id)
+      setLastSaved(new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }))
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : '儲存失敗，請再試一次')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!selectedHotel || !rating || positive.length < 50) return
     setSubmitting(true)
     setSubmitError('')
     try {
-      const res = await fetch('/api/reviews', {
-        method: 'POST',
+      const currentId = savedDraftId
+      const url = currentId ? `/api/reviews/${currentId}` : '/api/reviews'
+      const method = currentId ? 'PATCH' : 'POST'
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_id: selectedHotel.id,
-          rating,
-          positive,
-          negative: noNegative ? '' : negative,
-          check_in_month: checkInMonth,
-          purposes,
-          bed_type: bedType,
-          has_kids: hasKids,
-          recommend_for: recommendFor,
-        }),
+        body: JSON.stringify(buildPayload('submit')),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
-      router.push(`/hotel/${selectedHotel.id}?reviewed=1`)
+      router.push(`/profile?submitted=1`)
     } catch (e: unknown) {
       setSubmitError(e instanceof Error ? e.message : '發生錯誤，請再試一次')
     } finally {
@@ -725,22 +794,40 @@ export default function WritePage() {
               <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-700 mb-4 flex items-start gap-2">
                 <span>🎁</span>
                 <span>
-                  發佈後獲得 <strong>50 點</strong>旅人積分，附照片再 <strong>+5 點</strong>，可折抵 KBK exchange 訂房。
+                  審核通過後獲得 <strong>50 點</strong>旅人積分，附照片再 <strong>+5 點</strong>，可折抵 KBK exchange 訂房。
                 </span>
               </div>
               {submitError && (
-                <p className="text-sm text-red-500 text-center mb-2">{submitError}</p>
+                <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-3">
+                  <p className="text-sm text-red-600">{submitError}</p>
+                </div>
               )}
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting || !selectedHotel || !rating || positive.length < 50}
-                className="w-full bg-neutral-900 text-white text-sm font-medium py-3.5 rounded-full hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {submitting ? '發佈中…' : '發佈評論'}
-              </button>
+              {lastSaved && (
+                <p className="text-xs text-neutral-400 text-center mb-2">✓ 草稿已儲存於 {lastSaved}</p>
+              )}
+              {loadingDraft && (
+                <p className="text-xs text-neutral-400 text-center mb-2">載入草稿中…</p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={saveDraft}
+                  disabled={submitting || !selectedHotel}
+                  className="flex-1 bg-white border border-neutral-200 text-neutral-700 text-sm font-medium py-3.5 rounded-full hover:bg-neutral-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {submitting ? '儲存中…' : '儲存草稿'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting || !selectedHotel || !rating || positive.length < 50}
+                  className="flex-[2] bg-neutral-900 text-white text-sm font-medium py-3.5 rounded-full hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {submitting ? '送出中…' : '送出審核'}
+                </button>
+              </div>
               <p className="text-xs text-neutral-400 text-center mt-3">
-                發佈前會經過人工審核，通常 24 小時內完成
+                送出後會經過人工審核，通常 24 小時內完成
               </p>
             </div>
           </div>
