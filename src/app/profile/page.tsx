@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession, signIn, signOut } from 'next-auth/react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -28,6 +28,10 @@ const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }>
 }
 
 export default function ProfilePage() {
+  return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#F5F5F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#AAA', fontSize: '14px' }}>載入中…</p></div>}><ProfilePageInner /></Suspense>
+}
+
+function ProfilePageInner() {
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
   const submitted = searchParams.get('submitted')

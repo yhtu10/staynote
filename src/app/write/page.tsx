@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
 import { useSession, signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -163,6 +163,10 @@ type HotelSuggestion = { id: number; name_en: string; prefecture: string; countr
 
 // --- Main page ---
 export default function WritePage() {
+  return <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#AAA' }}>載入中…</p></div>}><WritePageInner /></Suspense>
+}
+
+function WritePageInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
