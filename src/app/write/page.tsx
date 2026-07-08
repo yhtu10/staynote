@@ -3,6 +3,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSession, signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 // --- Web Speech API types ---
 interface ISpeechRecognition extends EventTarget {
@@ -213,6 +219,11 @@ export default function WritePage() {
   const [rating, setRating] = useState(0)
   const [recommendFor, setRecommendFor] = useState<GuestType[]>([])
 
+  // Photos
+  const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([])
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     if (hotelQuery.length < 2) { setHotelSuggestions([]); return }
     const timer = setTimeout(async () => {
@@ -319,7 +330,40 @@ export default function WritePage() {
   const toggleRecommend = (g: GuestType) =>
     setRecommendFor((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])
 
-  const buildPayload = (action: 'draft' | 'submit') => ({
+  const addPhotos = (files: FileList | null) => {
+    if (!files) return
+    const newPhotos = Array.from(files).slice(0, 5 - photos.length).map(file => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }))
+    setPhotos(prev => [...prev, ...newPhotos].slice(0, 5))
+  }
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => {
+      URL.revokeObjectURL(prev[index].preview)
+      return prev.filter((_, i) => i !== index)
+    })
+  }
+
+  const uploadPhotos = async (): Promise<string[]> => {
+    if (photos.length === 0) return []
+    setUploadingPhotos(true)
+    const urls: string[] = []
+    for (const p of photos) {
+      const ext = p.file.name.split('.').pop() ?? 'jpg'
+      const path = `reviews/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error } = await supabaseClient.storage.from('review-photos').upload(path, p.file, { upsert: false })
+      if (!error) {
+        const { data } = supabaseClient.storage.from('review-photos').getPublicUrl(path)
+        urls.push(data.publicUrl)
+      }
+    }
+    setUploadingPhotos(false)
+    return urls
+  }
+
+  const buildPayload = (action: 'draft' | 'submit', photoUrls: string[] = []) => ({
     property_id: selectedHotel?.id,
     rating: rating || null,
     positive,
@@ -329,6 +373,7 @@ export default function WritePage() {
     bed_type: bedType || null,
     has_kids: hasKids,
     recommend_for: recommendFor,
+    photos: photoUrls,
     action,
   })
 
@@ -337,13 +382,14 @@ export default function WritePage() {
     setSubmitting(true)
     setSubmitError('')
     try {
+      const photoUrls = await uploadPhotos()
       const currentId = savedDraftId
       const url = currentId ? `/api/reviews/${currentId}` : '/api/reviews'
       const method = currentId ? 'PATCH' : 'POST'
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPayload('draft')),
+        body: JSON.stringify(buildPayload('draft', photoUrls)),
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error)
@@ -361,13 +407,14 @@ export default function WritePage() {
     setSubmitting(true)
     setSubmitError('')
     try {
+      const photoUrls = await uploadPhotos()
       const currentId = savedDraftId
       const url = currentId ? `/api/reviews/${currentId}` : '/api/reviews'
       const method = currentId ? 'PATCH' : 'POST'
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPayload('submit')),
+        body: JSON.stringify(buildPayload('submit', photoUrls)),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
       router.push(`/profile?submitted=1`)
@@ -696,11 +743,40 @@ export default function WritePage() {
                   入住照片
                   <span className="text-xs text-neutral-400 border border-neutral-200 rounded px-1.5 py-0.5 ml-2 font-normal">選填</span>
                 </label>
-                <div className="border-2 border-dashed border-neutral-200 rounded-xl p-6 text-center hover:border-neutral-400 transition-colors cursor-pointer">
-                  <div className="text-2xl mb-2">📷</div>
-                  <p className="text-sm text-neutral-600">點擊或拖曳上傳（最多 5 張）</p>
-                  <p className="text-xs text-neutral-400 mt-1">支援 JPG、PNG，單檔上限 10MB</p>
-                </div>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={e => addPhotos(e.target.files)}
+                />
+                {photos.length < 5 && (
+                  <div
+                    className="border-2 border-dashed border-neutral-200 rounded-xl p-6 text-center hover:border-neutral-400 transition-colors cursor-pointer"
+                    onClick={() => photoInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); addPhotos(e.dataTransfer.files) }}
+                  >
+                    <div className="text-2xl mb-2">📷</div>
+                    <p className="text-sm text-neutral-600">點擊或拖曳上傳（最多 5 張，已選 {photos.length} 張）</p>
+                    <p className="text-xs text-neutral-400 mt-1">支援 JPG、PNG，單檔上限 10MB</p>
+                  </div>
+                )}
+                {photos.length > 0 && (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {photos.map((p, i) => (
+                      <div key={i} className="relative aspect-square">
+                        <img src={p.preview} alt="" className="w-full h-full object-cover rounded-xl" />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(i)}
+                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none"
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-2 bg-emerald-50 rounded-xl p-3 text-xs text-emerald-700 flex items-start gap-2">
                   <span className="mt-0.5">🛡️</span>
                   <span>附上入住照片可提高評論可信度，讓其他旅人更放心參考你的經驗。<strong>同時獲得額外 +5 積分。</strong></span>
@@ -758,10 +834,8 @@ export default function WritePage() {
                   />
                   無明顯缺點
                 </label>
-                {!noNegative && (
-                  <span className={`text-xs ${negative.length >= 30 ? 'text-emerald-600' : 'text-neutral-400'}`}>
-                    {negative.length >= 30 ? '✓' : `還需要 ${Math.max(0, 30 - negative.length)} 字`}
-                  </span>
+                {!noNegative && negative.length > 0 && (
+                  <span className="text-xs text-neutral-400">{negative.length} 字</span>
                 )}
               </div>
             </div>
@@ -821,15 +895,15 @@ export default function WritePage() {
                   disabled={submitting || !selectedHotel}
                   className="flex-1 bg-white border border-neutral-200 text-neutral-700 text-sm font-medium py-3.5 rounded-full hover:bg-neutral-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {submitting ? '儲存中…' : '儲存草稿'}
+                  {uploadingPhotos ? '上傳照片中…' : submitting ? '儲存中…' : '儲存草稿'}
                 </button>
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  disabled={submitting || !selectedHotel || !rating || positive.length < 50}
+                  disabled={submitting || uploadingPhotos || !selectedHotel || !rating || positive.length < 50}
                   className="flex-[2] bg-neutral-900 text-white text-sm font-medium py-3.5 rounded-full hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {submitting ? '送出中…' : '送出審核'}
+                  {uploadingPhotos ? '上傳照片中…' : submitting ? '送出中…' : '送出審核'}
                 </button>
               </div>
               <p className="text-xs text-neutral-400 text-center mt-3">

@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const body = await req.json()
-  const { property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for } = body
+  const { property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for, photos } = body
   const action: "draft" | "submit" = body.action ?? "submit"
 
   if (action === "submit" && (!rating || !positive || positive.length < 50)) {
@@ -68,6 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     bed_type: bed_type ?? null,
     has_kids: has_kids ?? false,
     recommend_for: recommend_for ?? [],
+    ...(photos && photos.length > 0 ? { photos } : {}),
     status,
     rejection_reason: null, // 重新送審時清除退回原因
     updated_at: new Date().toISOString(),

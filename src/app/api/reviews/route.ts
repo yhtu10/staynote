@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for } = body
+  const { property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for, photos } = body
   const action: "draft" | "submit" = body.action ?? "submit"
 
   // 草稿不驗證；送審才驗證
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     bed_type: bed_type ?? null,
     has_kids: has_kids ?? false,
     recommend_for: recommend_for ?? [],
+    photos: photos ?? [],
     status,
     updated_at: new Date().toISOString(),
   }).select("id").single()
