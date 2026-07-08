@@ -123,20 +123,40 @@ function extractPrefecture(query: string): string | null {
 
 async function fetchAvgRatings(propIds: number[]): Promise<Map<number, number>> {
   if (propIds.length === 0) return new Map()
-  const { data } = await supabase
+
+  // 用戶評論平均（approved reviews）
+  const { data: reviewData } = await supabase
     .from("reviews")
     .select("property_id, rating")
     .in("property_id", propIds)
     .eq("status", "approved")
-  const totals = new Map<number, { sum: number; count: number }>()
-  for (const r of data ?? []) {
+  const userTotals = new Map<number, { sum: number; count: number }>()
+  for (const r of reviewData ?? []) {
     if (!r.rating) continue
-    const cur = totals.get(r.property_id) ?? { sum: 0, count: 0 }
-    totals.set(r.property_id, { sum: cur.sum + r.rating, count: cur.count + 1 })
+    const cur = userTotals.get(r.property_id) ?? { sum: 0, count: 0 }
+    userTotals.set(r.property_id, { sum: cur.sum + r.rating, count: cur.count + 1 })
   }
+
+  // HafH travel story ai_rating 平均
+  const { data: storyData } = await supabase
+    .from("travel_stories")
+    .select("property_id, ai_rating")
+    .in("property_id", propIds)
+    .not("ai_rating", "is", null)
+  const aiTotals = new Map<number, { sum: number; count: number }>()
+  for (const s of storyData ?? []) {
+    if (s.ai_rating == null) continue
+    const cur = aiTotals.get(s.property_id) ?? { sum: 0, count: 0 }
+    aiTotals.set(s.property_id, { sum: cur.sum + s.ai_rating, count: cur.count + 1 })
+  }
+
+  // 合併：優先用戶評論，沒有則用 AI 評分
   const result = new Map<number, number>()
-  for (const [id, { sum, count }] of totals) {
-    result.set(id, Math.round((sum / count) * 10) / 10)
+  for (const id of propIds) {
+    const u = userTotals.get(id)
+    if (u) { result.set(id, Math.round((u.sum / u.count) * 10) / 10); continue }
+    const a = aiTotals.get(id)
+    if (a) result.set(id, Math.round((a.sum / a.count) * 10) / 10)
   }
   return result
 }
@@ -251,23 +271,27 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
       .in("id", nameMatchPropIds)
     const avgRatings = await fetchAvgRatings(nameMatchPropIds)
 
-    // 撈每間旅宿的 top story（含 ai_rating）供星星顯示
+    // fetchAvgRatings 已整合用戶評論 + HafH ai_rating 平均
+    // 另外撈 top story 供推薦原因文字顯示
     const { data: nameStories } = await supabase
       .from("travel_stories")
       .select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email, ai_rating")
       .in("property_id", nameMatchPropIds)
       .order("likes_count", { ascending: false })
-      .limit(nameMatchPropIds.length * 3)
-    const topStoryByProp = new Map<number, typeof nameStories extends (infer T)[] | null ? T : never>()
+
+    const topStoryByProp = new Map<number, NonNullable<typeof nameStories>[0]>()
     for (const s of nameStories ?? []) {
       if (!topStoryByProp.has(s.property_id)) topStoryByProp.set(s.property_id, s)
     }
 
-    const hotels = (nameProps ?? []).map(p => ({
-      property: { ...p, avg_rating: avgRatings.get(p.id) ?? null },
-      stories: topStoryByProp.has(p.id) ? [{ ...topStoryByProp.get(p.id)!, ai_rating: topStoryByProp.get(p.id)?.ai_rating ?? null }] : [],
-      tags: [],
-    }))
+    const hotels = (nameProps ?? []).map(p => {
+      const topStory = topStoryByProp.get(p.id) ?? null
+      return {
+        property: { ...p, avg_rating: avgRatings.get(p.id) ?? null },
+        stories: topStory ? [{ ...topStory, ai_rating: topStory.ai_rating ?? null }] : [],
+        tags: [],
+      }
+    })
     const firstProp = nameProps?.[0]
     return {
       results: [],
