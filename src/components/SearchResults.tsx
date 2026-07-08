@@ -25,8 +25,9 @@ type Result = {
 const CARD_COLORS = ["#EEF0FF", "#FFF8EE", "#F0FFF4", "#FFF0F5", "#F0F8FF", "#FFFBEE"]
 const PAGE_SIZE = 20
 
-function extractReason(story: Result["stories"][0], matchReason?: string | null): string {
+function extractReason(story: Result["stories"][0] | null, matchReason?: string | null): string {
   if (matchReason) return matchReason
+  if (!story) return ""
   const text = story.zh_tw_description || story.description || ""
   if (!text) return ""
   // Find the most "interesting" sentence (longer than 20 chars)
