@@ -10,7 +10,8 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) {
+  const userId = (session?.user as { id?: string })?.id ?? ""
+  if (!userId) {
     return NextResponse.json({ error: "未登入" }, { status: 401 })
   }
 
@@ -26,14 +27,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "請選擇飯店" }, { status: 400 })
   }
 
-  const userId = (session.user as { id?: string }).id ?? ""
   const status = action === "draft" ? "draft" : "pending"
 
   const { data, error } = await supabase.from("reviews").insert({
     property_id,
     user_id: userId,
-    author_email: session.user.email,
-    author_name: session.user.name ?? "",
+    author_email: session?.user?.email ?? null,
+    author_name: session?.user?.name ?? "",
     rating: rating ?? null,
     positive: positive ?? "",
     negative: negative ?? "",

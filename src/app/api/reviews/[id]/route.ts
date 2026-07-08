@@ -11,10 +11,10 @@ const supabase = createClient(
 // GET /api/reviews/[id] - 取得自己的評論（用於編輯頁面載入）
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) return NextResponse.json({ error: "未登入" }, { status: 401 })
+  const userId = (session?.user as { id?: string })?.id ?? ""
+  if (!userId) return NextResponse.json({ error: "未登入" }, { status: 401 })
 
   const { id } = await params
-  const userId = (session.user as { id?: string }).id ?? ""
 
   const { data, error } = await supabase
     .from("reviews")
@@ -30,10 +30,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // PATCH /api/reviews/[id] - 更新評論（草稿或重新送審）
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) return NextResponse.json({ error: "未登入" }, { status: 401 })
+  const userId = (session?.user as { id?: string })?.id ?? ""
+  if (!userId) return NextResponse.json({ error: "未登入" }, { status: 401 })
 
   const { id } = await params
-  const userId = (session.user as { id?: string }).id ?? ""
 
   // 確認是本人的評論，且尚未通過審核
   const { data: existing } = await supabase
@@ -81,10 +81,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // DELETE /api/reviews/[id] - 刪除草稿或被退回的評論
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) return NextResponse.json({ error: "未登入" }, { status: 401 })
+  const userId = (session?.user as { id?: string })?.id ?? ""
+  if (!userId) return NextResponse.json({ error: "未登入" }, { status: 401 })
 
   const { id } = await params
-  const userId = (session.user as { id?: string }).id ?? ""
 
   const { data: existing } = await supabase
     .from("reviews")
