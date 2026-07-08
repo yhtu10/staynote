@@ -140,7 +140,7 @@ function Chip({
 
 const ITEM_H = 44
 
-function WheelColumn({ items, selectedIndex, onSelect, disabled = false }: {
+function WheelColumn({ items, selectedIndex, onSelect, disabled }: {
   items: string[]
   selectedIndex: number
   onSelect: (i: number) => void
