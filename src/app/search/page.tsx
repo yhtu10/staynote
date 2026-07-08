@@ -129,7 +129,7 @@ async function fetchAvgRatings(propIds: number[]): Promise<Map<number, number>> 
     .from("reviews")
     .select("property_id, rating")
     .in("property_id", propIds)
-    .eq("status", "approved")
+    .neq("status", "pending")
   const userTotals = new Map<number, { sum: number; count: number }>()
   for (const r of reviewData ?? []) {
     if (!r.rating) continue
@@ -179,7 +179,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
         .from("properties")
         .select("id")
         .ilike("name_zh", `%${query}%`)
-        .eq("status", "approved")
+        .neq("status", "pending")
         .limit(20)
       nameMatchPropIds = (zhMatches ?? []).map(p => p.id)
     } else if (/^[\w\s\-\.\/]+$/.test(query)) {
@@ -193,7 +193,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
           .from("properties")
           .select("id")
           .or(`name_en.ilike.${first}%,name_en.ilike.% ${first}%`)
-          .eq("status", "approved")
+          .neq("status", "pending")
           .limit(20)
         for (const w of words.slice(1)) {
           boundaryQ = boundaryQ.ilike("name_en", `%${w}%`)
@@ -204,7 +204,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
 
       // 退而求其次：多字 AND 模糊比對
       if (nameMatchPropIds.length === 0 && words.length > 0) {
-        let fuzzyQ = supabase.from("properties").select("id").eq("status", "approved").limit(20)
+        let fuzzyQ = supabase.from("properties").select("id").neq("status", "pending").limit(20)
         for (const w of words) {
           fuzzyQ = fuzzyQ.ilike("name_en", `%${w}%`)
         }
@@ -304,7 +304,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
       .from("properties")
       .select("id, name_en, name_zh, country, prefecture, cover_image_url")
       .in("id", nameMatchPropIds)
-      .eq("status", "approved")
+      .neq("status", "pending")
     const avgRatings = await fetchAvgRatings(nameMatchPropIds)
 
     // fetchAvgRatings 已整合用戶評論 + HafH ai_rating 平均
@@ -378,7 +378,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     .from("properties")
     .select("id, name_en, name_zh, country, prefecture, cover_image_url")
     .in("id", sortedPropIds)
-    .eq("status", "approved")
+    .neq("status", "pending")
 
   const propMap = new Map((properties ?? []).map(p => [p.id, p]))
 
@@ -487,7 +487,7 @@ async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise
 
   const topStoryIds = sortedPropIds.map(id => propScores.get(id)!.topStoryId)
   const [{ data: properties }, { data: stories }, { data: tagRows }] = await Promise.all([
-    supabase.from("properties").select("id, name_en, name_zh, country, prefecture, cover_image_url").in("id", sortedPropIds).eq("status", "approved"),
+    supabase.from("properties").select("id, name_en, name_zh, country, prefecture, cover_image_url").in("id", sortedPropIds).neq("status", "pending"),
     supabase.from("travel_stories").select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email, ai_rating").in("id", topStoryIds),
     supabase.from("story_tags").select("story_id, tag").in("story_id", topStoryIds).limit(100),
   ])
