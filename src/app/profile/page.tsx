@@ -14,6 +14,7 @@ type Review = {
   purposes: string[] | null
   status: string
   rejection_reason?: string | null
+  photos?: string[] | null
   updated_at: string
   created_at: string
   property_name?: string
@@ -229,9 +230,19 @@ export default function ProfilePage() {
                           </div>
                         )}
 
-                        <p style={{ fontSize: '13px', color: '#555', lineHeight: 1.7, marginBottom: '12px' }}>
+                        <p style={{ fontSize: '13px', color: '#555', lineHeight: 1.7, marginBottom: r.photos?.length ? '8px' : '12px' }}>
                           {(r.positive || '（尚無內容）').slice(0, 100)}{r.positive?.length > 100 ? '…' : ''}
                         </p>
+
+                        {r.photos && r.photos.length > 0 && (
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            {r.photos.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                <img src={url} alt="" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #EBEBEB' }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
 
                         {/* Actions */}
                         {(s === 'draft' || s === 'rejected') && (

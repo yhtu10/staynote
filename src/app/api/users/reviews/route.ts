@@ -17,7 +17,7 @@ export async function GET() {
   const userId = (session.user as { id?: string }).id ?? ""
   const { data: reviews } = await supabase
     .from("reviews")
-    .select("id, property_id, rating, positive, negative, check_in_month, purposes, status, rejection_reason, updated_at, created_at")
+    .select("id, property_id, rating, positive, negative, check_in_month, purposes, photos, status, rejection_reason, updated_at, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(50)

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const { data: reviews, error } = await supabase
     .from("reviews")
-    .select("id, property_id, author_name, author_email, rating, positive, negative, check_in_month, purposes, bed_type, recommend_for, status, rejection_reason, created_at, updated_at")
+    .select("id, property_id, author_name, author_email, rating, positive, negative, check_in_month, purposes, bed_type, recommend_for, photos, status, rejection_reason, created_at, updated_at")
     .eq("status", status)
     .order("updated_at", { ascending: true })
     .limit(50)

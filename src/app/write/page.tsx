@@ -3,12 +3,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSession, signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-)
 
 // --- Web Speech API types ---
 interface ISpeechRecognition extends EventTarget {
@@ -344,18 +338,13 @@ export default function WritePage() {
   const uploadPhotos = async (): Promise<string[]> => {
     if (photos.length === 0) return []
     setUploadingPhotos(true)
-    const urls: string[] = []
-    for (const p of photos) {
-      const ext = p.file.name.split('.').pop() ?? 'jpg'
-      const path = `reviews/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error } = await supabaseClient.storage.from('review-photos').upload(path, p.file, { upsert: false })
-      if (!error) {
-        const { data } = supabaseClient.storage.from('review-photos').getPublicUrl(path)
-        urls.push(data.publicUrl)
-      }
-    }
+    const fd = new FormData()
+    photos.forEach(p => fd.append('files', p.file))
+    const res = await fetch('/api/reviews/photos', { method: 'POST', body: fd })
     setUploadingPhotos(false)
-    return urls
+    if (!res.ok) return []
+    const { urls } = await res.json()
+    return urls ?? []
   }
 
   const buildPayload = (action: 'draft' | 'submit', photoUrls: string[] = []) => ({

@@ -16,6 +16,7 @@ type Review = {
   purposes: string[]
   bed_type: string
   recommend_for: string[]
+  photos?: string[]
   status: string
   rejection_reason?: string
   updated_at: string
@@ -188,6 +189,15 @@ export default function AdminReviewsPage() {
                 </div>
               )}
 
+              {r.photos && r.photos.length > 0 && (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
+                  {r.photos.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt="" style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "8px", border: "1px solid #EBEBEB" }} />
+                    </a>
+                  ))}
+                </div>
+              )}
               {r.rejection_reason && (
                 <div style={{ background: "#FFF5F5", border: "1px solid #FECACA", borderRadius: "8px", padding: "10px 12px", marginBottom: "10px" }}>
                   <p style={{ fontSize: "12px", color: "#DC2626" }}>退回原因：{r.rejection_reason}</p>
