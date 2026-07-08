@@ -47,17 +47,18 @@ export default async function StoryPage({ params }: { params: Promise<{ id: stri
 
   const { data: story } = await supabase
     .from("travel_stories")
-    .select("id, title, zh_tw_title, description, zh_tw_description, author_email, likes_count, published_at, ai_rating, hafh_url, cover_image_url, property_id, properties(id, name_en, country, prefecture, cover_image_url)")
+    .select("id, title, zh_tw_title, description, zh_tw_description, stay_description, stay_image_url, author_email, likes_count, published_at, ai_rating, hafh_url, cover_image_url, property_id, properties(id, name_en, country, prefecture, cover_image_url)")
     .eq("id", storyId)
     .single()
 
   if (!story) notFound()
 
   const property = (story.properties as unknown) as { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null } | null
-  const coverImg = story.cover_image_url || property?.cover_image_url
+  const coverImg = story.cover_image_url || story.stay_image_url || property?.cover_image_url
   const authorName = story.author_email ? story.author_email.split("@")[0] : "旅人"
   const storyTitle = story.zh_tw_title || story.title || ""
-  const content = story.zh_tw_description || story.description || ""
+  const stayContent = story.stay_description || ""
+  const travelContent = story.zh_tw_description || story.description || ""
 
   return (
     <main style={{ minHeight: "100vh", background: "#F7F8FA", paddingBottom: 48 }}>
@@ -94,9 +95,20 @@ export default async function StoryPage({ params }: { params: Promise<{ id: stri
             <p style={{ fontSize: 16, fontWeight: 700, color: "#111", lineHeight: 1.5, marginBottom: 12 }}>{storyTitle}</p>
           )}
 
-          {/* 內文 */}
-          {content && (
-            <p style={{ fontSize: 14, color: "#333", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{content}</p>
+          {/* 住宿體驗 */}
+          {stayContent && (
+            <div style={{ marginBottom: travelContent ? 16 : 0 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: "#888", marginBottom: 6, letterSpacing: "0.05em" }}>住宿體驗</p>
+              <p style={{ fontSize: 14, color: "#333", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{stayContent}</p>
+            </div>
+          )}
+
+          {/* 旅行體驗 */}
+          {travelContent && (
+            <div style={stayContent ? { paddingTop: 16, borderTop: "1px solid #F0F0F0" } : {}}>
+              {stayContent && <p style={{ fontSize: 11, fontWeight: 600, color: "#888", marginBottom: 6, letterSpacing: "0.05em" }}>旅行中的體驗</p>}
+              <p style={{ fontSize: 14, color: "#333", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{travelContent}</p>
+            </div>
           )}
 
           {/* 作者 + 日期 + 原文連結 */}
