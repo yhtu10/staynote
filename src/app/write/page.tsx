@@ -138,14 +138,142 @@ function Chip({
   )
 }
 
+const ITEM_H = 44
+
+function WheelColumn({ items, selectedIndex, onSelect, disabled = false }: {
+  items: string[]
+  selectedIndex: number
+  onSelect: (i: number) => void
+  disabled?: (i: number) => boolean
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const isDragging = useRef(false)
+  const startY = useRef(0)
+  const startScroll = useRef(0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.scrollTop = selectedIndex * ITEM_H
+  }, [selectedIndex])
+
+  function snapToNearest() {
+    const el = ref.current
+    if (!el) return
+    const idx = Math.round(el.scrollTop / ITEM_H)
+    const clamped = Math.max(0, Math.min(items.length - 1, idx))
+    if (!(disabled && disabled(clamped))) {
+      onSelect(clamped)
+    }
+    el.scrollTop = clamped * ITEM_H
+  }
+
+  function onScroll() {
+    if (!isDragging.current) {
+      clearTimeout((ref.current as HTMLDivElement & { _t?: ReturnType<typeof setTimeout> })?._t)
+      ;(ref.current as HTMLDivElement & { _t?: ReturnType<typeof setTimeout> })!._t = setTimeout(snapToNearest, 120)
+    }
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    isDragging.current = true
+    startY.current = e.touches[0].clientY
+    startScroll.current = ref.current!.scrollTop
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    ref.current!.scrollTop = startScroll.current - (e.touches[0].clientY - startY.current)
+  }
+  function onTouchEnd() {
+    isDragging.current = false
+    snapToNearest()
+  }
+  function onMouseDown(e: React.MouseEvent) {
+    isDragging.current = true
+    startY.current = e.clientY
+    startScroll.current = ref.current!.scrollTop
+    function onMove(ev: MouseEvent) {
+      ref.current!.scrollTop = startScroll.current - (ev.clientY - startY.current)
+    }
+    function onUp() {
+      isDragging.current = false
+      snapToNearest()
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+      {/* highlight bar */}
+      <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: ITEM_H, transform: 'translateY(-50%)', background: '#F3F4F6', borderRadius: '10px', pointerEvents: 'none', zIndex: 1 }} />
+      <div
+        ref={ref}
+        onScroll={onScroll}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+        style={{
+          height: ITEM_H * 5,
+          overflowY: 'scroll',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+          cursor: 'grab',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ paddingTop: ITEM_H * 2, paddingBottom: ITEM_H * 2 }}>
+          {items.map((label, i) => {
+            const isSelected = i === selectedIndex
+            const dis = disabled ? disabled(i) : false
+            return (
+              <div key={i} onClick={() => !dis && onSelect(i)}
+                style={{
+                  height: ITEM_H, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: isSelected ? '16px' : '14px',
+                  fontWeight: isSelected ? 700 : 400,
+                  color: dis ? '#CCC' : isSelected ? '#111' : '#888',
+                  cursor: dis ? 'default' : 'pointer',
+                  transition: 'font-size 0.15s, color 0.15s',
+                  position: 'relative', zIndex: 2,
+                }}>
+                {label}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      {/* fade top/bottom */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: ITEM_H * 2, background: 'linear-gradient(to bottom, white, transparent)', pointerEvents: 'none', zIndex: 3 }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: ITEM_H * 2, background: 'linear-gradient(to top, white, transparent)', pointerEvents: 'none', zIndex: 3 }} />
+    </div>
+  )
+}
+
 function MonthPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const now = new Date()
   const [open, setOpen] = useState(false)
-  const [viewYear, setViewYear] = useState(() => {
-    if (value) return parseInt(value.split('/')[0])
-    return now.getFullYear()
-  })
   const ref = useRef<HTMLDivElement>(null)
+
+  const minYear = now.getFullYear() - 3
+  const maxYear = now.getFullYear()
+  const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => `${minYear + i} 年`)
+  const months = Array.from({ length: 12 }, (_, i) => `${i + 1} 月`)
+
+  const initYear = value ? parseInt(value.split('/')[0]) : now.getFullYear()
+  const initMonth = value ? parseInt(value.split('/')[1]) : now.getMonth() + 1
+
+  const [yearIdx, setYearIdx] = useState(initYear - minYear)
+  const [monthIdx, setMonthIdx] = useState(initMonth - 1)
+
+  useEffect(() => {
+    if (value) {
+      setYearIdx(parseInt(value.split('/')[0]) - minYear)
+      setMonthIdx(parseInt(value.split('/')[1]) - 1)
+    }
+  }, [value])
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -155,34 +283,26 @@ function MonthPicker({ value, onChange }: { value: string; onChange: (v: string)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [open])
 
-  const selectedYear = value ? parseInt(value.split('/')[0]) : null
-  const selectedMonth = value ? parseInt(value.split('/')[1]) : null
-  const minYear = now.getFullYear() - 3
-  const maxYear = now.getFullYear()
+  const selectedYear = minYear + yearIdx
+  const selectedMonth = monthIdx + 1
 
-  const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+  function isMonthDisabled(i: number) {
+    return selectedYear === now.getFullYear() && (i + 1) > now.getMonth() + 1
+  }
 
-  function select(m: number) {
-    onChange(`${viewYear}/${String(m).padStart(2, '0')}`)
+  function confirm() {
+    onChange(`${selectedYear}/${String(selectedMonth).padStart(2, '0')}`)
     setOpen(false)
   }
 
-  function isFuture(m: number) {
-    return viewYear > now.getFullYear() || (viewYear === now.getFullYear() && m > now.getMonth() + 1)
-  }
-
   const display = value
-    ? `${selectedYear} 年 ${selectedMonth} 月`
+    ? `${initYear} 年 ${initMonth} 月`
     : '選擇入住年月'
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className={`w-full border rounded-xl px-3 py-2.5 text-sm text-left focus:outline-none transition-colors ${
-          value ? 'text-neutral-900 border-neutral-400' : 'text-neutral-400 border-neutral-200'
-        }`}
+      <button type="button" onClick={() => setOpen(v => !v)}
+        className={`w-full border rounded-xl px-3 py-2.5 text-sm text-left focus:outline-none transition-colors ${value ? 'text-neutral-900 border-neutral-400' : 'text-neutral-400 border-neutral-200'}`}
       >
         {display}
         <span style={{ float: 'right', opacity: 0.4 }}>▾</span>
@@ -191,41 +311,25 @@ function MonthPicker({ value, onChange }: { value: string; onChange: (v: string)
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
-          background: 'white', border: '1px solid #E5E7EB', borderRadius: '16px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '16px', width: '240px',
+          background: 'white', border: '1px solid #E5E7EB', borderRadius: '20px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.14)', width: '220px', overflow: 'hidden',
         }}>
-          {/* Year navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <button type="button" onClick={() => setViewYear(y => Math.max(minYear, y - 1))}
-              disabled={viewYear <= minYear}
-              style={{ fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', color: viewYear <= minYear ? '#CCC' : '#111', padding: '0 8px' }}>
-              ‹
-            </button>
-            <span style={{ fontSize: '15px', fontWeight: 700 }}>{viewYear} 年</span>
-            <button type="button" onClick={() => setViewYear(y => Math.min(maxYear, y + 1))}
-              disabled={viewYear >= maxYear}
-              style={{ fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', color: viewYear >= maxYear ? '#CCC' : '#111', padding: '0 8px' }}>
-              ›
-            </button>
+          <div style={{ display: 'flex', gap: '4px', padding: '12px 16px 0' }}>
+            <WheelColumn items={years} selectedIndex={yearIdx} onSelect={i => {
+              setYearIdx(i)
+              // 若切換年後月份變成未來，退回到當月
+              const newYear = minYear + i
+              if (newYear === now.getFullYear() && monthIdx > now.getMonth()) {
+                setMonthIdx(now.getMonth())
+              }
+            }} />
+            <WheelColumn items={months} selectedIndex={monthIdx} onSelect={setMonthIdx} disabled={isMonthDisabled} />
           </div>
-          {/* Month grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-            {MONTHS.map((label, i) => {
-              const m = i + 1
-              const isSelected = selectedYear === viewYear && selectedMonth === m
-              const disabled = isFuture(m)
-              return (
-                <button key={m} type="button" onClick={() => !disabled && select(m)} disabled={disabled}
-                  style={{
-                    padding: '8px 0', borderRadius: '10px', fontSize: '13px', border: 'none', cursor: disabled ? 'default' : 'pointer',
-                    background: isSelected ? '#111' : disabled ? 'transparent' : '#F5F5F5',
-                    color: isSelected ? 'white' : disabled ? '#CCC' : '#333',
-                    fontWeight: isSelected ? 700 : 400,
-                  }}>
-                  {label}
-                </button>
-              )
-            })}
+          <div style={{ padding: '12px 16px' }}>
+            <button type="button" onClick={confirm}
+              style={{ width: '100%', background: '#111', color: 'white', border: 'none', borderRadius: '12px', padding: '10px 0', fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              確認
+            </button>
           </div>
         </div>
       )}
