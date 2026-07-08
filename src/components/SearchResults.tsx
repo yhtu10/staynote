@@ -54,10 +54,9 @@ export default function SearchResults({ results }: { results: Result[] }) {
           const reason = extractReason(topStory, matchReason)
           const authorRaw = topStory?.author_email?.split("@")[0] ?? "旅人"
 
-          // 優先用非通用 OGP 的 property 圖，否則暫用 story 圖（皆為 HafH 上的照片）
-          const propImg = property.cover_image_url && property.cover_image_url !== GENERIC_OGP
+          // 旅宿主圖只用 property.cover_image_url，story 圖不作替補
+          const displayImg = property.cover_image_url && property.cover_image_url !== GENERIC_OGP
             ? property.cover_image_url : null
-          const displayImg = propImg ?? topStory?.cover_image_url ?? null
 
           return (
             <Link
