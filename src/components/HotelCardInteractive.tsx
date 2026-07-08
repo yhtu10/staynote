@@ -13,6 +13,15 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
   const [showReplies, setShowReplies] = useState(false)
   const [replies, setReplies] = useState<Reply[]>(card.replies ?? [])
   const [showReplyInput, setShowReplyInput] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  function copyReviewLink() {
+    const url = `${window.location.origin}/review/${card.id}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
   const [replyText, setReplyText] = useState("")
 
   function handleHelpful(type: "up" | "down") {
@@ -160,6 +169,20 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
         >
           👎 沒幫助
         </button>
+        {card.type === "review" && (
+          <button
+            onClick={copyReviewLink}
+            style={{
+              display: "flex", alignItems: "center", gap: "4px", fontSize: "11px",
+              padding: "4px 10px", borderRadius: "20px", border: "1px solid #E5E5E5",
+              background: copied ? "#F0FFF4" : "white",
+              color: copied ? "#16A34A" : "#666",
+              cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s"
+            }}
+          >
+            {copied ? "✓ 已複製" : "🔗 分享"}
+          </button>
+        )}
         <button
           onClick={() => { setShowReplies((v) => !v); setShowReplyInput(false) }}
           style={{
