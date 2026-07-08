@@ -15,8 +15,9 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
   const [showReplyInput, setShowReplyInput] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  function copyReviewLink() {
-    const url = `${window.location.origin}/review/${card.id}`
+  function copyShareLink() {
+    const path = card.type === "review" ? `/review/${card.id}` : `/story/${card.id}`
+    const url = `${window.location.origin}${path}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -169,9 +170,8 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
         >
           👎 沒幫助
         </button>
-        {card.type === "review" && (
-          <button
-            onClick={copyReviewLink}
+        <button
+            onClick={copyShareLink}
             style={{
               display: "flex", alignItems: "center", gap: "4px", fontSize: "11px",
               padding: "4px 10px", borderRadius: "20px", border: "1px solid #E5E5E5",
@@ -182,7 +182,6 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
           >
             {copied ? "✓ 已複製" : "🔗 分享"}
           </button>
-        )}
         <button
           onClick={() => { setShowReplies((v) => !v); setShowReplyInput(false) }}
           style={{
