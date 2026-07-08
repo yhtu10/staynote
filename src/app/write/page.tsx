@@ -138,6 +138,101 @@ function Chip({
   )
 }
 
+function MonthPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const now = new Date()
+  const [open, setOpen] = useState(false)
+  const [viewYear, setViewYear] = useState(() => {
+    if (value) return parseInt(value.split('/')[0])
+    return now.getFullYear()
+  })
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [open])
+
+  const selectedYear = value ? parseInt(value.split('/')[0]) : null
+  const selectedMonth = value ? parseInt(value.split('/')[1]) : null
+  const minYear = now.getFullYear() - 3
+  const maxYear = now.getFullYear()
+
+  const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+
+  function select(m: number) {
+    onChange(`${viewYear}/${String(m).padStart(2, '0')}`)
+    setOpen(false)
+  }
+
+  function isFuture(m: number) {
+    return viewYear > now.getFullYear() || (viewYear === now.getFullYear() && m > now.getMonth() + 1)
+  }
+
+  const display = value
+    ? `${selectedYear} 年 ${selectedMonth} 月`
+    : '選擇入住年月'
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full border rounded-xl px-3 py-2.5 text-sm text-left focus:outline-none transition-colors ${
+          value ? 'text-neutral-900 border-neutral-400' : 'text-neutral-400 border-neutral-200'
+        }`}
+      >
+        {display}
+        <span style={{ float: 'right', opacity: 0.4 }}>▾</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
+          background: 'white', border: '1px solid #E5E7EB', borderRadius: '16px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '16px', width: '240px',
+        }}>
+          {/* Year navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <button type="button" onClick={() => setViewYear(y => Math.max(minYear, y - 1))}
+              disabled={viewYear <= minYear}
+              style={{ fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', color: viewYear <= minYear ? '#CCC' : '#111', padding: '0 8px' }}>
+              ‹
+            </button>
+            <span style={{ fontSize: '15px', fontWeight: 700 }}>{viewYear} 年</span>
+            <button type="button" onClick={() => setViewYear(y => Math.min(maxYear, y + 1))}
+              disabled={viewYear >= maxYear}
+              style={{ fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', color: viewYear >= maxYear ? '#CCC' : '#111', padding: '0 8px' }}>
+              ›
+            </button>
+          </div>
+          {/* Month grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+            {MONTHS.map((label, i) => {
+              const m = i + 1
+              const isSelected = selectedYear === viewYear && selectedMonth === m
+              const disabled = isFuture(m)
+              return (
+                <button key={m} type="button" onClick={() => !disabled && select(m)} disabled={disabled}
+                  style={{
+                    padding: '8px 0', borderRadius: '10px', fontSize: '13px', border: 'none', cursor: disabled ? 'default' : 'pointer',
+                    background: isSelected ? '#111' : disabled ? 'transparent' : '#F5F5F5',
+                    color: isSelected ? 'white' : disabled ? '#CCC' : '#333',
+                    fontWeight: isSelected ? 700 : 400,
+                  }}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0)
   return (
@@ -409,14 +504,6 @@ export default function WritePage() {
     }
   }
 
-  const monthOptions = Array.from({ length: 18 }, (_, i) => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - i)
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    return { value: `${y}/${m}`, label: `${y} 年 ${d.getMonth() + 1} 月` }
-  })
-
   // --- Login gate ---
   if (status === 'loading') {
     return (
@@ -635,16 +722,7 @@ export default function WritePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-2">入住年月 <span className="text-red-400">*</span></label>
-                  <select
-                    value={checkInMonth}
-                    onChange={(e) => setCheckInMonth(e.target.value)}
-                    className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:border-neutral-400"
-                  >
-                    <option value="">選擇月份</option>
-                    {monthOptions.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                  <MonthPicker value={checkInMonth} onChange={setCheckInMonth} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-2">同行總人數 <span className="text-red-400">*</span></label>

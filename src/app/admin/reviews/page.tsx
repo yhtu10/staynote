@@ -20,6 +20,7 @@ type Review = {
   status: string
   rejection_reason?: string
   updated_at: string
+  review_count?: number
 }
 
 function starStr(r: number) {
@@ -153,9 +154,16 @@ export default function AdminReviewsPage() {
             <div key={r.id} style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "20px 24px" }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
                 <div>
-                  <p style={{ fontSize: "15px", fontWeight: 700, color: "#111", marginBottom: "3px" }}>
-                    {r.property_name ?? `Property #${r.property_id}`}
-                  </p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
+                    <p style={{ fontSize: "15px", fontWeight: 700, color: "#111" }}>
+                      {r.property_name ?? `Property #${r.property_id}`}
+                    </p>
+                    {r.review_count && r.review_count > 1 && (
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "#B45309", background: "#FEF3C7", borderRadius: "8px", padding: "2px 8px" }}>
+                        此用戶第 {r.review_count} 次評論此旅宿
+                      </span>
+                    )}
+                  </div>
                   <p style={{ fontSize: "12px", color: "#AAA" }}>
                     {r.author_name} · {r.author_email} · {r.check_in_month} · {r.bed_type}
                   </p>

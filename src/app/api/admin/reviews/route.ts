@@ -33,5 +33,27 @@ export async function GET(req: NextRequest) {
     : { data: [] }
   const nameMap = new Map((properties ?? []).map(p => [p.id, p.name_en]))
 
-  return NextResponse.json((reviews ?? []).map(r => ({ ...r, property_name: nameMap.get(r.property_id) })))
+  // 計算每個 user+property 已有幾則評論（含所有狀態）
+  const userPropertyPairs = (reviews ?? []).map(r => `${r.user_id ?? r.author_email}::${r.property_id}`)
+  const uniquePairs = [...new Set(userPropertyPairs)]
+
+  // 對每筆評論查詢該 user 對該 property 的歷史總數
+  const reviewList = reviews ?? []
+  const countMap = new Map<string, number>()
+  if (reviewList.length > 0) {
+    const { data: allCounts } = await supabase
+      .from("reviews")
+      .select("author_email, property_id")
+      .in("property_id", propIds)
+    ;(allCounts ?? []).forEach(c => {
+      const key = `${c.author_email}::${c.property_id}`
+      countMap.set(key, (countMap.get(key) ?? 0) + 1)
+    })
+  }
+
+  return NextResponse.json((reviews ?? []).map(r => {
+    const key = `${r.author_email}::${r.property_id}`
+    const totalCount = countMap.get(key) ?? 1
+    return { ...r, property_name: nameMap.get(r.property_id), review_count: totalCount }
+  }))
 }
