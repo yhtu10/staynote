@@ -223,8 +223,8 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     }
   }
 
-  // 若語意/關鍵字都沒結果，但名稱比對有找到旅宿 → 回傳 nameMatch 專屬流程
-  if (storyRows.length === 0 && nameMatchPropIds.length > 0) {
+  // 若名稱比對有找到旅宿 → 不管語意結果，直接走 nameMatch 專屬流程
+  if (nameMatchPropIds.length > 0) {
     const { data: nameProps } = await supabase
       .from("properties")
       .select("id, name_en, country, prefecture, cover_image_url")
