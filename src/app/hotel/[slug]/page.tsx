@@ -36,7 +36,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
   ] = await Promise.all([
     supabase.from("properties").select("id, name_en, country, prefecture, cover_image_url").eq("id", propertyId).single(),
     supabase.from("travel_stories")
-      .select("id, title, zh_tw_title, description, zh_tw_description, hafh_url, likes_count, published_at, author_email, ai_rating")
+      .select("id, title, zh_tw_title, description, zh_tw_description, hafh_url, likes_count, helpful_count, published_at, author_email, ai_rating")
       .eq("property_id", propertyId)
       .order("likes_count", { ascending: false })
       .limit(30),
@@ -270,7 +270,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                   const desc = curatedStory.zh_tw_description || curatedStory.description || ""
                   return desc.length > 200 ? desc.slice(0, 200) + "…" : desc || undefined
                 })(),
-                helpfulCount: curatedStory.likes_count ?? 0,
+                helpfulCount: curatedStory.helpful_count ?? 0,
                 hafh_url: curatedStory.hafh_url ?? undefined,
               }}
             />
@@ -364,7 +364,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                   isAiRating: true,
                   title: story.zh_tw_title || story.title || undefined,
                   content: excerpt || undefined,
-                  helpfulCount: story.likes_count ?? 0,
+                  helpfulCount: story.helpful_count ?? 0,
                   hafh_url: story.hafh_url ?? undefined,
                 }
 

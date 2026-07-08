@@ -32,30 +32,32 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
   }
   const [replyText, setReplyText] = useState("")
 
+  function buildPayload(vote: string) {
+    return card.type === "review"
+      ? { review_id: card.id, vote }
+      : { story_id: card.id, vote }
+  }
+
   async function handleHelpful(type: "up" | "down") {
     if (helpful === type) {
       setHelpful(null)
       if (type === "up") setHelpfulCount((c) => c - 1)
       localStorage.removeItem(storageKey)
-      if (card.type === "review") {
-        await fetch("/api/reviews/helpful", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ review_id: card.id, vote: type }),
-        })
-      }
+      await fetch("/api/reviews/helpful", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload(type)),
+      })
     } else {
       if (helpful === "up") setHelpfulCount((c) => c - 1)
       if (type === "up") setHelpfulCount((c) => c + 1)
       setHelpful(type)
       localStorage.setItem(storageKey, type)
-      if (card.type === "review") {
-        await fetch("/api/reviews/helpful", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ review_id: card.id, vote: type }),
-        })
-      }
+      await fetch("/api/reviews/helpful", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload(type)),
+      })
     }
   }
 
