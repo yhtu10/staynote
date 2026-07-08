@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
   const { data } = await supabase
     .from("properties")
-    .select("id, name_en, prefecture, country")
+    .select("id, name_en, prefecture, country, cover_image_url")
     .ilike("name_en", `%${q}%`)
     .limit(8)
 

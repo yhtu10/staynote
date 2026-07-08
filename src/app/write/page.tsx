@@ -358,7 +358,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
-type HotelSuggestion = { id: number; name_en: string; prefecture: string; country: string }
+type HotelSuggestion = { id: number; name_en: string; prefecture: string; country: string; cover_image_url?: string | null }
 
 // --- Main page ---
 export default function WritePage() {
@@ -374,14 +374,14 @@ export default function WritePage() {
       if (hotelId && !p.get('edit')) {
         fetch(`/api/hotels/${hotelId}`)
           .then(r => r.json())
-          .then(h => { if (h?.id) setSelectedHotel({ id: h.id, name: h.name_en }) })
+          .then(h => { if (h?.id) setSelectedHotel({ id: h.id, name: h.name_en, prefecture: h.prefecture, country: h.country, cover_image_url: h.cover_image_url }) })
       }
     }
   }, [])
 
   // Hotel search
   const [hotelQuery, setHotelQuery] = useState('')
-  const [selectedHotel, setSelectedHotel] = useState<{ id: number; name: string } | null>(null)
+  const [selectedHotel, setSelectedHotel] = useState<{ id: number; name: string; prefecture?: string; country?: string; cover_image_url?: string | null } | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hotelSuggestions, setHotelSuggestions] = useState<HotelSuggestion[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -452,7 +452,7 @@ export default function WritePage() {
         if (data.property_id) {
           fetch(`/api/hotels/${data.property_id}`)
             .then(r => r.json())
-            .then(p => { if (p?.id) setSelectedHotel({ id: p.id, name: p.name_en }) })
+            .then(p => { if (p?.id) setSelectedHotel({ id: p.id, name: p.name_en, prefecture: p.prefecture, country: p.country, cover_image_url: p.cover_image_url }) })
         }
         if (data.status === 'rejected') {
           setSubmitError(`上次送審被退回：${data.rejection_reason ?? '請修改後重新送出'}`)
@@ -667,22 +667,24 @@ export default function WritePage() {
             你住的是哪間飯店？
           </label>
           <div className="relative">
-            <input
-              type="text"
-              value={hotelQuery}
-              onChange={(e) => { setHotelQuery(e.target.value); setSelectedHotel(null); setShowSuggestions(true) }}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-              placeholder="輸入飯店名稱搜尋…"
-              className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
-            />
+            {!selectedHotel && (
+              <input
+                type="text"
+                value={hotelQuery}
+                onChange={(e) => { setHotelQuery(e.target.value); setShowSuggestions(true) }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                placeholder="輸入飯店名稱搜尋…"
+                className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
+              />
+            )}
             {showSuggestions && hotelSuggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-sm z-10 overflow-hidden">
                 {hotelSuggestions.map((h) => (
                   <button
                     key={h.id}
                     type="button"
-                    onMouseDown={() => { setHotelQuery(h.name_en); setSelectedHotel({ id: h.id, name: h.name_en }); setShowSuggestions(false) }}
+                    onMouseDown={() => { setHotelQuery(''); setSelectedHotel({ id: h.id, name: h.name_en, prefecture: h.prefecture, country: h.country, cover_image_url: h.cover_image_url }); setShowSuggestions(false) }}
                     className="w-full text-left px-4 py-3 text-sm text-neutral-700 hover:bg-neutral-50 border-b border-neutral-100 last:border-0"
                   >
                     <span>{h.name_en}</span>
@@ -693,7 +695,25 @@ export default function WritePage() {
             )}
           </div>
           {selectedHotel && (
-            <p className="text-sm text-emerald-600 mt-2">✓ 已選擇：{selectedHotel.name}</p>
+            <div className="mt-3 flex items-center gap-3 border border-emerald-200 bg-emerald-50 rounded-2xl overflow-hidden">
+              {selectedHotel.cover_image_url ? (
+                <img src={selectedHotel.cover_image_url} alt={selectedHotel.name} className="w-20 h-16 object-cover flex-shrink-0" />
+              ) : (
+                <div className="w-20 h-16 bg-emerald-100 flex items-center justify-center flex-shrink-0 text-2xl">🏨</div>
+              )}
+              <div className="flex-1 min-w-0 py-2 pr-3">
+                <p className="text-sm font-semibold text-neutral-800 truncate">{selectedHotel.name}</p>
+                {(selectedHotel.prefecture || selectedHotel.country) && (
+                  <p className="text-xs text-neutral-500 mt-0.5">{selectedHotel.prefecture} · {selectedHotel.country}</p>
+                )}
+                <p className="text-xs text-emerald-600 mt-1 font-medium">✓ 已選擇</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelectedHotel(null); setHotelQuery('') }}
+                className="pr-3 text-neutral-400 hover:text-neutral-600 text-lg leading-none"
+              >×</button>
+            </div>
           )}
         </section>
 
