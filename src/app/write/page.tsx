@@ -222,7 +222,6 @@ export default function WritePage() {
   // Photos
   const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
-  const photoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (hotelQuery.length < 2) { setHotelSuggestions([]); return }
@@ -743,25 +742,23 @@ export default function WritePage() {
                   入住照片
                   <span className="text-xs text-neutral-400 border border-neutral-200 rounded px-1.5 py-0.5 ml-2 font-normal">選填</span>
                 </label>
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={e => addPhotos(e.target.files)}
-                />
                 {photos.length < 5 && (
-                  <div
-                    className="border-2 border-dashed border-neutral-200 rounded-xl p-6 text-center hover:border-neutral-400 transition-colors cursor-pointer"
-                    onClick={() => photoInputRef.current?.click()}
+                  <label
+                    className="block border-2 border-dashed border-neutral-200 rounded-xl p-6 text-center hover:border-neutral-400 transition-colors cursor-pointer"
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); addPhotos(e.dataTransfer.files) }}
                   >
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      className="hidden"
+                      onChange={e => addPhotos(e.target.files)}
+                    />
                     <div className="text-2xl mb-2">📷</div>
                     <p className="text-sm text-neutral-600">點擊或拖曳上傳（最多 5 張，已選 {photos.length} 張）</p>
                     <p className="text-xs text-neutral-400 mt-1">支援 JPG、PNG，單檔上限 10MB</p>
-                  </div>
+                  </label>
                 )}
                 {photos.length > 0 && (
                   <div className="mt-3 grid grid-cols-3 gap-2">
