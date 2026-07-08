@@ -27,7 +27,27 @@ async function fetchPropertyImage(propId: number, name_en: string, prefecture: s
     }
   } catch { /* ignore */ }
 
-  // Step 2: Google Custom Search 備援
+  // Step 2: DuckDuckGo 圖片搜尋
+  try {
+    const q = `${name_en} ${prefecture ?? ""} hotel`
+    const r1 = await fetch("https://duckduckgo.com/?q=" + encodeURIComponent(q) + "&iax=images&ia=images", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+      signal: AbortSignal.timeout(10000),
+    })
+    const html = await r1.text()
+    const vqd = html.match(/vqd=['"](\d[\d-]+)['"]/)
+    if (vqd) {
+      const r2 = await fetch(`https://duckduckgo.com/i.js?q=${encodeURIComponent(q)}&vqd=${vqd[1]}&o=json&p=1`, {
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://duckduckgo.com/" },
+        signal: AbortSignal.timeout(8000),
+      })
+      const json = await r2.json()
+      const url = json?.results?.[0]?.image
+      if (url) { await supabase.from("properties").update({ cover_image_url: url }).eq("id", propId); return }
+    }
+  } catch { /* ignore */ }
+
+  // Step 3: Google Custom Search 備援
   const key = process.env.GOOGLE_CUSTOM_SEARCH_API_KEY
   const cx = process.env.GOOGLE_CUSTOM_SEARCH_CX
   if (!key || !cx) return
