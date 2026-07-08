@@ -108,6 +108,8 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
   const totalCount = allRatingValues.length
 
 
+  const propertyNameZh = (property as { name_zh?: string | null }).name_zh
+  const displayName = propertyNameZh || property.name_en
   const googleHotelsUrl = `https://www.google.com/travel/hotels/search?q=${encodeURIComponent(property.name_en)}`
   const mapQuery = encodeURIComponent(`${property.name_en} ${property.prefecture} ${property.country}`)
 
@@ -129,7 +131,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
         {/* Hero + Hotel Info */}
         <div style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", overflow: "hidden" }}>
           {property.cover_image_url ? (
-            <img src={property.cover_image_url} alt={property.name_en}
+            <img src={property.cover_image_url} alt={displayName}
               style={{ width: "100%", height: "220px", objectFit: "cover", display: "block" }} />
           ) : (
             <div style={{ background: "#EEF0FF", height: "160px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "48px" }}>
@@ -150,9 +152,9 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
             )}
 
             <h1 style={{ fontSize: "20px", fontWeight: 700, color: "#111", marginBottom: "2px", lineHeight: 1.3 }}>
-              {(property as { name_zh?: string | null }).name_zh || property.name_en}
+              {displayName}
             </h1>
-            {(property as { name_zh?: string | null }).name_zh && (
+            {propertyNameZh && (
               <p style={{ fontSize: "11px", color: "#CCC", marginBottom: "2px" }}>{property.name_en}</p>
             )}
             <p style={{ fontSize: "12px", color: "#AAA", marginBottom: "14px" }}>
@@ -231,7 +233,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
         {/* Map */}
         <div style={{ borderRadius: "16px", overflow: "hidden", border: "1px solid #EBEBEB", height: "200px" }}>
           <iframe
-            title={`${property.name_en} 地圖`}
+            title={`${displayName} 地圖`}
             src={`https://maps.google.com/maps?q=${mapQuery}&output=embed&hl=zh-TW`}
             width="100%" height="100%"
             style={{ border: 0 }}

@@ -28,10 +28,10 @@ export async function GET() {
   const propIds = [...new Set(reviews.map(r => r.property_id))]
   const { data: properties } = await supabase
     .from("properties")
-    .select("id, name_en")
+    .select("id, name_en, name_zh")
     .in("id", propIds)
 
-  const nameMap = new Map((properties ?? []).map(p => [p.id, p.name_en]))
+  const nameMap = new Map((properties ?? []).map(p => [p.id, (p as { name_zh?: string | null }).name_zh || p.name_en]))
   const result = reviews.map(r => ({ ...r, property_name: nameMap.get(r.property_id) ?? null }))
 
   return NextResponse.json(result)

@@ -29,9 +29,9 @@ export async function GET(req: NextRequest) {
 
   const propIds = [...new Set((reviews ?? []).map(r => r.property_id))]
   const { data: properties } = propIds.length > 0
-    ? await supabase.from("properties").select("id, name_en").in("id", propIds)
+    ? await supabase.from("properties").select("id, name_en, name_zh").in("id", propIds)
     : { data: [] }
-  const nameMap = new Map((properties ?? []).map(p => [p.id, p.name_en]))
+  const nameMap = new Map((properties ?? []).map(p => [p.id, (p as { name_zh?: string | null }).name_zh || p.name_en]))
 
   // 對每筆評論查詢該 user 對該 property 的歷史總數
   const reviewList = reviews ?? []

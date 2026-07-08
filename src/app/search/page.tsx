@@ -472,7 +472,7 @@ function extractKeywords(query: string): string[] {
 }
 
 type StoryRowSimple = { story_id: number; property_id: number; similarity: number }
-type SearchResult = { property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null; avg_rating?: number | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null; ai_rating: number | null }[]; tags: string[] }
+type SearchResult = { property: { id: number; name_en: string; name_zh?: string | null; country: string; prefecture: string; cover_image_url?: string | null; avg_rating?: number | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null; ai_rating: number | null }[]; tags: string[] }
 
 async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise<SearchResult[]> {
   const propScores = new Map<number, { topStoryId: number; similarity: number }>()
