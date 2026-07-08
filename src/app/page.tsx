@@ -130,7 +130,7 @@ export default function Home() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSearch() } }}
-            placeholder="例如：我想帶爸媽去泡溫泉，第一次去九州，希望交通方便一點…"
+            placeholder="例如：我預計和伴侶去京都，期待一趟回憶滿滿的旅行"
             rows={3}
             style={{
               background: "transparent", border: "none", outline: "none",
