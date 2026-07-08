@@ -21,11 +21,15 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 async function translateBatch(items) {
   const list = items.map(p => `${p.id}: ${p.name_en}${p.prefecture ? ` (${p.prefecture}, ${p.country})` : ''}`).join('\n')
-  const prompt = `以下是飯店英文名稱，請給出正體中文的常用譯名或慣用名稱（OTA 網站上旅客熟悉的名稱）。
-若是知名連鎖品牌（如 Hyatt、Marriott、Hilton 旗下），優先使用台灣旅遊業通行的中文名稱。
-若無固定譯名，可音譯或意譯，但盡量簡短自然。
+  const prompt = `以下是飯店英文名稱。請只回傳你在 Agoda、Booking.com、Hotels.com、Expedia 等 OTA 網站上確認見過的繁體中文官方名稱。
 
-輸出格式：JSON 物件，key 為 id（數字），value 為中文名稱（純文字）。
+規則：
+- 只回傳有把握是 OTA 實際使用的繁體中文名稱
+- 不確定、沒見過、或該飯店沒有通行繁中名稱 → 回傳 null
+- 不要自己翻譯、音譯或猜測
+- 知名連鎖品牌（如萬豪、凱悅、希爾頓、洲際、雅高旗下）通常有固定中文名
+
+輸出格式：JSON 物件，key 為 id（數字），value 為中文名稱或 null。
 
 ${list}`
 
@@ -46,14 +50,21 @@ ${list}`
 }
 
 async function run() {
-  // 只抓還沒有 name_zh 的
-  const { data: rows } = await supabase
-    .from("properties")
-    .select("id, name_en, prefecture, country")
-    .is("name_zh", null)
-    .limit(20000)
+  // 分頁抓全部沒有 name_zh 的
+  const PAGE = 1000
+  let rows = []
+  for (let offset = 0; ; offset += PAGE) {
+    const { data } = await supabase
+      .from("properties")
+      .select("id, name_en, prefecture, country")
+      .is("name_zh", null)
+      .range(offset, offset + PAGE - 1)
+    if (!data || data.length === 0) break
+    rows = rows.concat(data)
+    if (data.length < PAGE) break
+  }
 
-  if (!rows || rows.length === 0) { console.log("全部都有 name_zh 了！"); return }
+  if (rows.length === 0) { console.log("全部都有 name_zh 了！"); return }
   console.log(`待翻譯：${rows.length} 筆`)
 
   let done = 0, failed = 0
@@ -62,7 +73,7 @@ async function run() {
     const result = await translateBatch(batch)
 
     const updates = Object.entries(result)
-      .filter(([, v]) => typeof v === "string" && v.trim())
+      .filter(([, v]) => v !== null && typeof v === "string" && v.trim())
       .map(([id, name_zh]) => supabase.from("properties").update({ name_zh: String(name_zh).trim() }).eq("id", parseInt(id)))
 
     await Promise.all(updates)

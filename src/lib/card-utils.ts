@@ -27,4 +27,8 @@ export type CardData = {
   helpfulCount?: number
   replies?: { author: string; content: string; date: string }[]
   hafh_url?: string
+  property_id?: number
+  prefecture?: string
+  country?: string
+  avatarImg?: string
 }

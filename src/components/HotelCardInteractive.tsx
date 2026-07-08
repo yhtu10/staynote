@@ -1,41 +1,44 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import type { CardData } from "@/lib/card-utils"
 
-type Reply = { author: string; content: string; date: string }
+type Comment = { id: number; author_name: string; author_image: string | null; content: string; created_at: string }
 
 export type { CardData }
 
 export default function HotelCardInteractive({ card, isCurated = false }: { card: CardData; isCurated?: boolean }) {
+  const { data: session } = useSession()
   const storageKey = `vote_${card.type}_${card.id}`
   const [helpful, setHelpful] = useState<"up" | "down" | null>(null)
   const [helpfulCount, setHelpfulCount] = useState(card.helpfulCount ?? 0)
-  const [showReplies, setShowReplies] = useState(false)
-  const [replies, setReplies] = useState<Reply[]>(card.replies ?? [])
-  const [showReplyInput, setShowReplyInput] = useState(false)
+  const [showComments, setShowComments] = useState(false)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [commentsLoaded, setCommentsLoaded] = useState(false)
+  const [showCommentInput, setShowCommentInput] = useState(false)
+  const [commentText, setCommentText] = useState("")
+  const [submittingComment, setSubmittingComment] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // 從 localStorage 還原之前的投票狀態
   useEffect(() => {
     const saved = localStorage.getItem(storageKey)
     if (saved === "up" || saved === "down") setHelpful(saved)
   }, [storageKey])
 
   function copyShareLink() {
-    const path = card.type === "review" ? `/review/${card.id}` : `/story/${card.id}`
+    const path = card.type === "review" ? `/hotel/${card.property_id}` : `/story/${card.id}`
     const url = `${window.location.origin}${path}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
   }
-  const [replyText, setReplyText] = useState("")
 
   function buildPayload(vote: string) {
     return card.type === "review"
       ? { review_id: card.id, vote }
-      : { story_id: card.id, vote }
+      : { story_id: card.id, vote, property_id: card.property_id, prefecture: card.prefecture, country: card.country }
   }
 
   async function handleHelpful(type: "up" | "down") {
@@ -61,18 +64,44 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
     }
   }
 
-  function submitReply() {
-    if (!replyText.trim()) return
-    const now = new Date()
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-    setReplies((prev) => [...prev, { author: "你", content: replyText.trim(), date }])
-    setReplyText("")
-    setShowReplyInput(false)
-    setShowReplies(true)
+  async function loadComments() {
+    if (commentsLoaded) return
+    const param = card.type === "review" ? `review_id=${card.id}` : `story_id=${card.id}`
+    const res = await fetch(`/api/comments?${param}`)
+    const data = await res.json()
+    if (Array.isArray(data)) setComments(data)
+    setCommentsLoaded(true)
+  }
+
+  function toggleComments() {
+    if (!showComments) loadComments()
+    setShowComments((v) => !v)
+    setShowCommentInput(false)
+  }
+
+  async function submitComment() {
+    if (!commentText.trim() || submittingComment) return
+    setSubmittingComment(true)
+    const body = card.type === "review"
+      ? { content: commentText.trim(), review_id: card.id }
+      : { content: commentText.trim(), story_id: card.id }
+    const res = await fetch("/api/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      const newComment = await res.json()
+      setComments((prev) => [...prev, newComment])
+      setCommentText("")
+      setShowCommentInput(false)
+    }
+    setSubmittingComment(false)
   }
 
   const showPositiveNegative = card.positive || card.negative
   const showContent = card.content && !showPositiveNegative
+  const commentCount = comments.length
 
   return (
     <div style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "18px 20px", position: "relative" }}>
@@ -89,7 +118,9 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "14px", fontWeight: 700, color: "#4B7BF5", flexShrink: 0
         }}>
-          {card.initial}
+          {card.avatarImg
+            ? <img src={card.avatarImg} alt={card.author} style={{ width: "36px", height: "36px", borderRadius: "50%", objectFit: "cover" }} />
+            : card.initial}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: "14px", fontWeight: 600, color: "#111" }}>{card.author}</p>
@@ -119,7 +150,7 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
         <p style={{ fontSize: "13px", fontWeight: 600, color: "#333", marginBottom: "8px" }}>{card.title}</p>
       )}
 
-      {/* Review content (positive/negative) */}
+      {/* Review content */}
       {card.positive && (
         <div style={{ display: "flex", gap: "8px", marginBottom: "6px" }}>
           <span style={{ fontSize: "11px", color: "#27AE60", marginTop: "2px", flexShrink: 0, fontWeight: 500 }}>✓ 滿意</span>
@@ -196,95 +227,106 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
           👎 沒幫助
         </button>
         <button
-            onClick={copyShareLink}
-            style={{
-              display: "flex", alignItems: "center", gap: "4px", fontSize: "11px",
-              padding: "4px 10px", borderRadius: "20px", border: "1px solid #E5E5E5",
-              background: copied ? "#F0FFF4" : "white",
-              color: copied ? "#16A34A" : "#666",
-              cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s"
-            }}
-          >
-            {copied ? "✓ 已複製" : "🔗 分享"}
-          </button>
-        <button
-          onClick={() => { setShowReplies((v) => !v); setShowReplyInput(false) }}
+          onClick={copyShareLink}
           style={{
             display: "flex", alignItems: "center", gap: "4px", fontSize: "11px",
             padding: "4px 10px", borderRadius: "20px", border: "1px solid #E5E5E5",
-            background: "white", color: "#666", cursor: "pointer", marginLeft: "auto",
-            fontFamily: "inherit"
+            background: copied ? "#F0FFF4" : "white",
+            color: copied ? "#16A34A" : "#666",
+            cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s"
           }}
         >
-          💬 回應{replies.length > 0 ? ` ${replies.length}` : ""}
+          {copied ? "✓ 已複製" : "🔗 分享"}
+        </button>
+        <button
+          onClick={toggleComments}
+          style={{
+            display: "flex", alignItems: "center", gap: "4px", fontSize: "11px",
+            padding: "4px 10px", borderRadius: "20px", border: "1px solid #E5E5E5",
+            background: showComments ? "#F8F8F8" : "white", color: "#666", cursor: "pointer",
+            marginLeft: "auto", fontFamily: "inherit"
+          }}
+        >
+          💬 回應{commentCount > 0 ? ` ${commentCount}` : ""}
         </button>
       </div>
 
-      {/* Replies */}
-      {showReplies && (
+      {/* Comments */}
+      {showComments && (
         <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-          {replies.map((r, i) => (
-            <div key={i} style={{
+          {comments.map((c) => (
+            <div key={c.id} style={{
               background: "#F8F8F8", borderRadius: "10px", padding: "10px 12px",
               display: "flex", gap: "8px"
             }}>
               <div style={{
-                width: "24px", height: "24px", borderRadius: "50%", background: "#E5E5E5",
+                width: "24px", height: "24px", borderRadius: "50%", overflow: "hidden",
+                background: "#E5E5E5", flexShrink: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "11px", color: "#888", flexShrink: 0
+                fontSize: "11px", color: "#888"
               }}>
-                {r.author[0]}
+                {c.author_image
+                  ? <img src={c.author_image} alt={c.author_name} style={{ width: "24px", height: "24px", objectFit: "cover" }} />
+                  : c.author_name[0]}
               </div>
               <div style={{ flex: 1 }}>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "#444" }}>{r.author}</span>
-                <span style={{ fontSize: "11px", color: "#CCC", marginLeft: "8px" }}>{r.date}</span>
-                <p style={{ fontSize: "12px", color: "#666", marginTop: "2px", lineHeight: 1.6 }}>{r.content}</p>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "#444" }}>{c.author_name}</span>
+                <span style={{ fontSize: "11px", color: "#CCC", marginLeft: "8px" }}>
+                  {new Date(c.created_at).toLocaleDateString("zh-TW")}
+                </span>
+                <p style={{ fontSize: "12px", color: "#666", marginTop: "2px", lineHeight: 1.6 }}>{c.content}</p>
               </div>
             </div>
           ))}
-          {!showReplyInput ? (
-            <button
-              onClick={() => setShowReplyInput(true)}
-              style={{
-                fontSize: "12px", color: "#4B7BF5", background: "none", border: "none",
-                cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit"
-              }}
-            >
-              + 留下回應
-            </button>
+
+          {session ? (
+            !showCommentInput ? (
+              <button
+                onClick={() => setShowCommentInput(true)}
+                style={{
+                  fontSize: "12px", color: "#4B7BF5", background: "none", border: "none",
+                  cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit"
+                }}
+              >
+                + 留下回應
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <input
+                  type="text"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitComment()}
+                  placeholder="輸入你的回應…"
+                  autoFocus
+                  style={{
+                    flex: 1, border: "1px solid #E0E0E0", borderRadius: "8px",
+                    padding: "6px 12px", fontSize: "12px", outline: "none", fontFamily: "inherit"
+                  }}
+                />
+                <button
+                  onClick={submitComment}
+                  disabled={submittingComment}
+                  style={{
+                    background: "#111", color: "white", border: "none", borderRadius: "8px",
+                    padding: "6px 12px", fontSize: "12px", cursor: "pointer", fontFamily: "inherit"
+                  }}
+                >
+                  送出
+                </button>
+                <button
+                  onClick={() => { setShowCommentInput(false); setCommentText("") }}
+                  style={{
+                    background: "none", border: "none", fontSize: "12px", color: "#AAA",
+                    cursor: "pointer", fontFamily: "inherit"
+                  }}
+                >
+                  取消
+                </button>
+              </div>
+            )
           ) : (
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submitReply()}
-                placeholder="輸入你的回應…"
-                autoFocus
-                style={{
-                  flex: 1, border: "1px solid #E0E0E0", borderRadius: "8px",
-                  padding: "6px 12px", fontSize: "12px", outline: "none", fontFamily: "inherit"
-                }}
-              />
-              <button
-                onClick={submitReply}
-                style={{
-                  background: "#111", color: "white", border: "none", borderRadius: "8px",
-                  padding: "6px 12px", fontSize: "12px", cursor: "pointer", fontFamily: "inherit"
-                }}
-              >
-                送出
-              </button>
-              <button
-                onClick={() => { setShowReplyInput(false); setReplyText("") }}
-                style={{
-                  background: "none", border: "none", fontSize: "12px", color: "#AAA",
-                  cursor: "pointer", fontFamily: "inherit"
-                }}
-              >
-                取消
-              </button>
-            </div>
+            <p style={{ fontSize: "11px", color: "#AAA" }}>登入後可留下回應</p>
           )}
         </div>
       )}

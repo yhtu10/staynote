@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/*)",
+      "Bash(node -e *)",
+      "Bash(npx tsc *)",
+      "Bash(npx tsc)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npm run *)",
+      "Bash(grep -n *)",
+      "Bash(grep -r *)",
+      "Bash(curl *)"
+    ]
+  }
+}

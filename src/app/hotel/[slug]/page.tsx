@@ -371,6 +371,9 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                   content: excerpt || undefined,
                   helpfulCount: story.helpful_count ?? 0,
                   hafh_url: story.hafh_url ?? undefined,
+                  property_id: property.id,
+                  prefecture: property.prefecture,
+                  country: property.country,
                 }
 
                 return <HotelCardInteractive key={story.id} card={card} />

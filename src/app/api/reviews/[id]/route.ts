@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { data, error } = await supabase
     .from("reviews")
-    .select("id, property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for, status, rejection_reason")
+    .select("id, property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for, photos, status, rejection_reason")
     .eq("id", parseInt(id))
     .eq("user_id", userId)
     .single()
@@ -44,9 +44,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (!existing) return NextResponse.json({ error: "找不到評論" }, { status: 404 })
-  if (existing.status === "approved") {
-    return NextResponse.json({ error: "已審核通過的評論無法修改" }, { status: 403 })
-  }
 
   const body = await req.json()
   const { property_id, rating, positive, negative, check_in_month, purposes, bed_type, has_kids, recommend_for, photos } = body
@@ -56,6 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "缺少必填欄位" }, { status: 400 })
   }
 
+  // 已發布的評論修改後重新送審（避免濫用）
   const status = action === "draft" ? "draft" : "pending"
 
   const { error } = await supabase.from("reviews").update({
@@ -70,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     recommend_for: recommend_for ?? [],
     ...(photos && photos.length > 0 ? { photos } : {}),
     status,
-    rejection_reason: null, // 重新送審時清除退回原因
+    rejection_reason: null,
     updated_at: new Date().toISOString(),
   }).eq("id", parseInt(id)).eq("user_id", userId)
 
