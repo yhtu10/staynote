@@ -482,14 +482,29 @@ export default async function SearchPage({
   const showFallbackMsg = (isFallback && results.length > 0) || (results.length === 0 && extraFallback.length > 0)
   const displayResults = results.length > 0 ? results : extraFallback
 
-  // nameMatch 時，抓同地點其他旅宿（依 AI 評分）
+  // nameMatch 時，抓同地點其他旅宿（直接查 travel_stories，不走語意）
   let locationResults: SearchResult[] = []
   const locationLabel = nameMatch?.prefecture ?? nameMatch?.country ?? null
   if (nameMatch && locationLabel) {
-    const locFallback = await searchFallback("", nameMatch.prefecture, nameMatch.country)
-    // 排除已顯示的旅宿
-    const matchedIds = new Set(nameMatch.hotels.map(h => h.property.id))
-    locationResults = locFallback.filter(r => !matchedIds.has(r.property.id)).slice(0, 6)
+    try {
+      let propQuery = supabase.from("properties").select("id").limit(200)
+      if (nameMatch.prefecture) propQuery = propQuery.eq("prefecture", nameMatch.prefecture)
+      else if (nameMatch.country) propQuery = propQuery.eq("country", nameMatch.country)
+      const { data: locProps } = await propQuery
+      const locIds = (locProps ?? []).map(p => p.id)
+      const matchedIds = new Set(nameMatch.hotels.map(h => h.property.id))
+      const filteredIds = locIds.filter(id => !matchedIds.has(id))
+      if (filteredIds.length > 0) {
+        const { data: locStories } = await supabase
+          .from("travel_stories").select("id, property_id, likes_count")
+          .in("property_id", filteredIds).order("likes_count", { ascending: false }).limit(40)
+        if (locStories && locStories.length > 0) {
+          locationResults = await assembleResults(
+            locStories.map(s => ({ story_id: s.id, property_id: s.property_id, similarity: 0 })), 6
+          )
+        }
+      }
+    } catch { /* 地點推薦失敗不影響主結果 */ }
   }
 
   return (
