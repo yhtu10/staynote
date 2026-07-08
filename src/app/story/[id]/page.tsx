@@ -19,14 +19,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params
   const { data: story } = await supabase
     .from("travel_stories")
-    .select("id, zh_tw_title, title, zh_tw_description, description, properties(name_en, cover_image_url)")
+    .select("id, zh_tw_title, title, zh_tw_description, description, properties(name_en, name_zh, cover_image_url)")
     .eq("id", parseInt(id))
     .single()
 
   if (!story) return { title: "旅行故事 | StayNote" }
 
-  const property = (story.properties as unknown) as { name_en: string; cover_image_url?: string | null } | null
-  const storyTitle = story.zh_tw_title || story.title || property?.name_en || "旅行故事"
+  const property = (story.properties as unknown) as { name_en: string; name_zh?: string | null; cover_image_url?: string | null } | null
+  const storyTitle = story.zh_tw_title || story.title || property?.name_zh || property?.name_en || "旅行故事"
   const description = (story.zh_tw_description || story.description || "").slice(0, 120)
 
   return {
@@ -53,7 +53,7 @@ export default async function StoryPage({ params }: { params: Promise<{ id: stri
 
   if (!story) notFound()
 
-  const property = (story.properties as unknown) as { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null } | null
+  const property = (story.properties as unknown) as { id: number; name_en: string; name_zh?: string | null; country: string; prefecture: string; cover_image_url?: string | null } | null
   const coverImg = story.cover_image_url || story.stay_image_url || property?.cover_image_url
   const authorName = story.author_email ? story.author_email.split("@")[0] : "旅人"
   const storyTitle = story.zh_tw_title || story.title || ""
@@ -75,7 +75,8 @@ export default async function StoryPage({ params }: { params: Promise<{ id: stri
           <div style={{ marginTop: 20, marginBottom: 4 }}>
             <Link href={`/hotel/${property.id}`} style={{ textDecoration: "none" }}>
               <p style={{ fontSize: 12, color: "#AAA", marginBottom: 4 }}>{property.prefecture} · {property.country}</p>
-              <p style={{ fontSize: 20, fontWeight: 700, color: "#111", lineHeight: 1.3 }}>{property.name_en}</p>
+              <p style={{ fontSize: 20, fontWeight: 700, color: "#111", lineHeight: 1.3 }}>{property.name_zh || property.name_en}</p>
+              {property.name_zh && <p style={{ fontSize: 11, color: "#CCC", marginTop: 2 }}>{property.name_en}</p>}
             </Link>
           </div>
         )}
@@ -134,7 +135,7 @@ export default async function StoryPage({ params }: { params: Promise<{ id: stri
         {property && (
           <div style={{ marginTop: 24, textAlign: "center" }}>
             <Link href={`/hotel/${property.id}`} style={{ fontSize: 13, color: "#4B7BF5", textDecoration: "none" }}>
-              查看 {property.name_en} 的所有評論 →
+              查看 {property.name_zh || property.name_en} 的所有評論 →
             </Link>
           </div>
         )}

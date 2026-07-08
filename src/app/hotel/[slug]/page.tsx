@@ -150,8 +150,11 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
             )}
 
             <h1 style={{ fontSize: "20px", fontWeight: 700, color: "#111", marginBottom: "2px", lineHeight: 1.3 }}>
-              {property.name_en}
+              {(property as { name_zh?: string | null }).name_zh || property.name_en}
             </h1>
+            {(property as { name_zh?: string | null }).name_zh && (
+              <p style={{ fontSize: "11px", color: "#CCC", marginBottom: "2px" }}>{property.name_en}</p>
+            )}
             <p style={{ fontSize: "12px", color: "#AAA", marginBottom: "14px" }}>
               {property.prefecture} · {property.country}
             </p>

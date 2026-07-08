@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params
   const { data: review } = await supabase
     .from("reviews")
-    .select("id, positive, rating, property_id, properties(name_en, cover_image_url)")
+    .select("id, positive, rating, property_id, properties(name_en, name_zh, cover_image_url)")
     .eq("id", parseInt(id))
     .eq("status", "approved")
     .single()
@@ -34,8 +34,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!review) return { title: "評論 | StayNote" }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const property = (review.properties as unknown) as { name_en: string; cover_image_url?: string | null } | null
-  const title = `${property?.name_en ?? "旅宿"} 的住宿評論 | StayNote`
+  const property = (review.properties as unknown) as { name_en: string; name_zh?: string | null; cover_image_url?: string | null } | null
+  const title = `${(property?.name_zh || property?.name_en) ?? "旅宿"} 的住宿評論 | StayNote`
   const description = review.positive?.slice(0, 120) ?? ""
 
   return {
@@ -56,7 +56,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 
   const { data: review } = await supabase
     .from("reviews")
-    .select("id, user_id, author_name, rating, positive, negative, check_in_month, bed_type, recommend_for, photos, created_at, property_id, properties(id, name_en, country, prefecture, cover_image_url)")
+    .select("id, user_id, author_name, rating, positive, negative, check_in_month, bed_type, recommend_for, photos, created_at, property_id, properties(id, name_en, name_zh, country, prefecture, cover_image_url)")
     .eq("id", reviewId)
     .eq("status", "approved")
     .single()
@@ -64,7 +64,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   if (!review) notFound()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const property = (review.properties as unknown) as { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null } | null
+  const property = (review.properties as unknown) as { id: number; name_en: string; name_zh?: string | null; country: string; prefecture: string; cover_image_url?: string | null } | null
 
   // 同旅宿其他評論
   const { data: otherReviews } = await supabase
@@ -101,7 +101,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           <div style={{ marginTop: 20, marginBottom: 4 }}>
             <Link href={`/hotel/${property.id}`} style={{ textDecoration: "none" }}>
               <p style={{ fontSize: 12, color: "#AAA", marginBottom: 4 }}>{property.prefecture} · {property.country}</p>
-              <p style={{ fontSize: 20, fontWeight: 700, color: "#111", lineHeight: 1.3 }}>{property.name_en}</p>
+              <p style={{ fontSize: 20, fontWeight: 700, color: "#111", lineHeight: 1.3 }}>{property.name_zh || property.name_en}</p>
+              {property.name_zh && <p style={{ fontSize: 11, color: "#CCC", marginTop: 2 }}>{property.name_en}</p>}
             </Link>
           </div>
         )}
@@ -188,7 +189,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         {property && (
           <div style={{ marginTop: 24, textAlign: "center" }}>
             <Link href={`/hotel/${property.id}`} style={{ fontSize: 13, color: "#4B7BF5", textDecoration: "none" }}>
-              查看 {property.name_en} 的所有評論 →
+              查看 {property.name_zh || property.name_en} 的所有評論 →
             </Link>
           </div>
         )}

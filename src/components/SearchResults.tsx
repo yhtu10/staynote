@@ -6,7 +6,7 @@ import { useState } from "react"
 const GENERIC_OGP = "https://www.hafh.com/images/ogp/ogp-en.png"
 
 type Result = {
-  property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null; avg_rating?: number | null }
+  property: { id: number; name_en: string; name_zh?: string | null; country: string; prefecture: string; cover_image_url?: string | null; avg_rating?: number | null }
   stories: {
     id: number
     zh_tw_description: string | null
@@ -89,9 +89,14 @@ export default function SearchResults({ results }: { results: Result[] }) {
                       ))}
                     </div>
                   )}
-                  <p style={{ fontSize: "15px", fontWeight: 700, color: "#111", marginBottom: "2px", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {property.name_en}
+                  <p style={{ fontSize: "15px", fontWeight: 700, color: "#111", marginBottom: "1px", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {property.name_zh || property.name_en}
                   </p>
+                  {property.name_zh && (
+                    <p style={{ fontSize: "10px", color: "#CCC", marginBottom: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {property.name_en}
+                    </p>
+                  )}
                   <p style={{ fontSize: "11px", color: "#AAA", marginBottom: "8px" }}>
                     {property.prefecture} · {property.country}
                   </p>
