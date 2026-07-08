@@ -279,7 +279,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
         {/* User Reviews */}
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <p style={{ fontSize: "11px", color: "#AAA", letterSpacing: "0.08em" }}>策人怎麼說</p>
+            <p style={{ fontSize: "11px", color: "#AAA", letterSpacing: "0.08em" }}>旅人分享的真實 StayNote</p>
             <Link href={`/write?hotel=${propertyId}`} style={{ fontSize: "13px", color: "#4B7BF5", textDecoration: "none", fontWeight: 500 }}>
               分享你的住宿 →
             </Link>
