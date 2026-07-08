@@ -33,28 +33,29 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
   const [replyText, setReplyText] = useState("")
 
   async function handleHelpful(type: "up" | "down") {
-    if (card.type !== "review") return // 只有用戶評論才計票
     if (helpful === type) {
-      // 取消投票
       setHelpful(null)
       if (type === "up") setHelpfulCount((c) => c - 1)
       localStorage.removeItem(storageKey)
-      await fetch("/api/reviews/helpful", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ review_id: card.id, vote: type }),
-      })
+      if (card.type === "review") {
+        await fetch("/api/reviews/helpful", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ review_id: card.id, vote: type }),
+        })
+      }
     } else {
-      // 換票：先扣掉舊票
       if (helpful === "up") setHelpfulCount((c) => c - 1)
       if (type === "up") setHelpfulCount((c) => c + 1)
       setHelpful(type)
       localStorage.setItem(storageKey, type)
-      await fetch("/api/reviews/helpful", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ review_id: card.id, vote: type }),
-      })
+      if (card.type === "review") {
+        await fetch("/api/reviews/helpful", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ review_id: card.id, vote: type }),
+        })
+      }
     }
   }
 
