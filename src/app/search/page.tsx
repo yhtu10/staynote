@@ -125,6 +125,19 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   const country = extractCountry(query)
   const prefecture = extractPrefecture(query)
 
+  // Step 0: 旅宿名稱直接比對（最高優先）
+  // 如果 query 像是旅宿名稱（非中文、無空格描述句），先查 name_en ilike
+  const looksLikeName = query.length >= 2 && /^[\w\s\-\.]+$/.test(query)
+  let nameMatchPropIds: number[] = []
+  if (looksLikeName) {
+    const { data: nameMatches } = await supabase
+      .from("properties")
+      .select("id")
+      .ilike("name_en", `%${query}%`)
+      .limit(20)
+    nameMatchPropIds = (nameMatches ?? []).map(p => p.id)
+  }
+
   // Step 1: embed the query
   let queryEmbedding: number[] | null = null
   try {
@@ -222,11 +235,25 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     }
   }
 
-  // Sort properties by best similarity score
+  // Sort properties: 名稱比對到的置頂，其餘依語意相似度排序
+  const nameMatchSet = new Set(nameMatchPropIds)
   const sortedPropIds = [...propScores.entries()]
-    .sort((a, b) => b[1].similarity - a[1].similarity)
+    .sort((a, b) => {
+      const aName = nameMatchSet.has(a[0]) ? 1 : 0
+      const bName = nameMatchSet.has(b[0]) ? 1 : 0
+      if (bName !== aName) return bName - aName
+      return b[1].similarity - a[1].similarity
+    })
     .slice(0, 60)
     .map(([propId]) => propId)
+
+  // 若名稱比對到的旅宿不在 storyRows 裡（該旅宿沒有 story），也補進來
+  for (const propId of nameMatchPropIds) {
+    if (!propScores.has(propId)) {
+      propScores.set(propId, { topStoryId: -1, similarity: 0 })
+      sortedPropIds.unshift(propId)
+    }
+  }
 
   // Step 5: fetch property info
   const { data: properties } = await supabase
@@ -264,6 +291,11 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     const property = propMap.get(propId)
     if (!property) continue
     const topStoryId = propScores.get(propId)!.topStoryId
+    if (topStoryId === -1) {
+      // 名稱比對到但無 story，仍顯示旅宿卡片（無評論）
+      finalResults.push({ property, stories: [], tags: [] })
+      continue
+    }
     const topStory = storyMap.get(topStoryId)
     if (!topStory) continue
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
