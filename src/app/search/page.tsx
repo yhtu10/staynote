@@ -223,6 +223,18 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     }
   }
 
+  // 若語意/關鍵字都沒結果，但名稱比對有找到旅宿，直接用名稱結果
+  if (storyRows.length === 0 && nameMatchPropIds.length > 0) {
+    const { data: nameProps } = await supabase
+      .from("properties")
+      .select("id, name_en, country, prefecture, cover_image_url")
+      .in("id", nameMatchPropIds)
+    return {
+      results: (nameProps ?? []).map(p => ({ property: p, stories: [], tags: [] })),
+      isFallback: false,
+    }
+  }
+
   // 語意搜尋有結果 = 精準；純關鍵字/地點 fallback = isFallback
   const isFallback = storyRows.every(r => r.similarity === 0)
   if (storyRows.length === 0) return { results: [], isFallback: true }
