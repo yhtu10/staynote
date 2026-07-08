@@ -171,12 +171,34 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   const looksLikeName = !country && !prefecture && query.length >= 2 && /^[\w\s\-\.\/]+$/.test(query)
   let nameMatchPropIds: number[] = []
   if (looksLikeName) {
-    const { data: nameMatches } = await supabase
-      .from("properties")
-      .select("id")
-      .ilike("name_en", `%${query}%`)
-      .limit(20)
-    nameMatchPropIds = (nameMatches ?? []).map(p => p.id)
+    const words = query.trim().toLowerCase().split(/\s+/).filter(w => w.length >= 2)
+
+    // 優先：字首邊界比對（名稱以第一個字開頭，或某個單字以它開頭）
+    // 適用 "omo" → OMO3/OMO5/OMO7，避免比到 Tomonoura/Kamomosi
+    if (words.length > 0) {
+      const first = words[0]
+      let boundaryQ = supabase
+        .from("properties")
+        .select("id")
+        .or(`name_en.ilike.${first}%,name_en.ilike.% ${first}%`)
+        .limit(20)
+      // 其餘字做 AND 過濾
+      for (const w of words.slice(1)) {
+        boundaryQ = boundaryQ.ilike("name_en", `%${w}%`)
+      }
+      const { data: boundaryMatches } = await boundaryQ
+      nameMatchPropIds = (boundaryMatches ?? []).map(p => p.id)
+    }
+
+    // 退而求其次：多字 AND 模糊比對（"omo osaka" → name 含 omo 且含 osaka）
+    if (nameMatchPropIds.length === 0 && words.length > 0) {
+      let fuzzyQ = supabase.from("properties").select("id").limit(20)
+      for (const w of words) {
+        fuzzyQ = fuzzyQ.ilike("name_en", `%${w}%`)
+      }
+      const { data: fuzzyMatches } = await fuzzyQ
+      nameMatchPropIds = (fuzzyMatches ?? []).map(p => p.id)
+    }
   }
 
   // Step 1: embed the query
