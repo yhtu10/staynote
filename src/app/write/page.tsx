@@ -257,7 +257,7 @@ function MonthPicker({ value, onChange }: { value: string; onChange: (v: string)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  const minYear = now.getFullYear() - 3
+  const minYear = now.getFullYear() - 5
   const maxYear = now.getFullYear()
   const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => `${minYear + i} 年`)
   const months = Array.from({ length: 12 }, (_, i) => `${i + 1} 月`)
