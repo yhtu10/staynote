@@ -21,19 +21,68 @@ const CONCURRENCY = 4
 
 async function fetchFromHafH(id) {
   try {
-    const res = await fetch(`https://www.hafh.com/zh-tw/properties/${id}`, {
-      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" },
+    const res = await fetch(`https://www.hafh.com/en/properties/${id}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
       signal: AbortSignal.timeout(10000),
     })
     if (res.status === 404) return { url: null, notFound: true }
     if (!res.ok) return { url: null, notFound: false }
     const html = await res.text()
-    const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
-    if (!match) return { url: null, notFound: false }
-    const str = JSON.stringify(JSON.parse(match[1]))
-    const imgs = [...str.matchAll(/hafh-prod-property_image[^"\\]*/g)].map(m => "https://storage.googleapis.com/" + m[0])
-    return { url: imgs[0] ?? null, notFound: false }
+
+    // og:image（屬性順序不固定，用寬鬆 regex）
+    const ogMatch = html.match(/<meta[^>]+property="og:image"[^>]*content="([^"]+)"|<meta[^>]+content="([^"]+)"[^>]*property="og:image"/)
+    const ogUrl = ogMatch?.[1] ?? ogMatch?.[2] ?? null
+    const GENERIC = "hafh.com/images/ogp"
+    if (ogUrl && !ogUrl.includes(GENERIC)) return { url: ogUrl, notFound: false }
+
+    // 備用：直接從 HTML 找 GCS URL
+    const directMatch = html.match(/https:\/\/storage\.googleapis\.com\/hafh-prod-property_image\/[a-z0-9]+/)
+    if (directMatch) return { url: directMatch[0], notFound: false }
+
+    return { url: null, notFound: false }
   } catch { return { url: null, notFound: false } }
+}
+
+async function fetchFromDDG(name, prefecture) {
+  try {
+    const q = `${name} ${prefecture ?? ""} hotel`
+    const r1 = await fetch("https://duckduckgo.com/?q=" + encodeURIComponent(q) + "&iax=images&ia=images", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+      signal: AbortSignal.timeout(10000),
+    })
+    const html = await r1.text()
+    const vqd = html.match(/vqd=['"](\d[\d-]+)['"]/)
+    if (!vqd) return null
+    const r2 = await fetch(`https://duckduckgo.com/i.js?q=${encodeURIComponent(q)}&vqd=${vqd[1]}&o=json&p=1`, {
+      headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://duckduckgo.com/" },
+      signal: AbortSignal.timeout(8000),
+    })
+    const json = await r2.json()
+    return json?.results?.[0]?.image ?? null
+  } catch { return null }
+}
+
+async function fetchFromBooking(name, prefecture) {
+  try {
+    const q = encodeURIComponent(`${name} ${prefecture ?? ""}`)
+    const url = `https://www.booking.com/searchresults.html?ss=${q}&lang=en-us`
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html",
+      },
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+    // 找 hotel 圖片（bstatic.com 是 Booking.com 的圖片 CDN）
+    const imgMatch = html.match(/https:\/\/cf\.bstatic\.com\/xdata\/images\/hotel\/[^"'\s]+\.jpg/)
+    return imgMatch?.[0] ?? null
+  } catch { return null }
 }
 
 async function fetchFromGoogle(name, prefecture) {
@@ -51,11 +100,17 @@ async function fetchFromGoogle(name, prefecture) {
 
 async function run() {
   // 取缺圖且有 travel story 的旅宿（有出現在搜尋的才有意義）
-  const { data: missing } = await supabase
+  const GENERIC_OGP = "https://www.hafh.com/images/ogp/ogp-en.png"
+
+  // 抓：沒圖、空字串、或是通用 OGP（前端不顯示的）
+  const { data: allProps } = await supabase
     .from("properties")
-    .select("id, name_en, prefecture")
-    .or("cover_image_url.is.null,cover_image_url.eq.")
-    .limit(5000)
+    .select("id, name_en, prefecture, cover_image_url")
+    .limit(20000)
+
+  const missing = (allProps ?? []).filter(p =>
+    !p.cover_image_url || p.cover_image_url === "" || p.cover_image_url === GENERIC_OGP
+  )
 
   const { data: stories } = await supabase.from("travel_stories").select("property_id")
   const withStory = new Set((stories ?? []).map(s => s.property_id))
@@ -76,19 +131,26 @@ async function run() {
       if (hafhUrl) {
         await supabase.from("properties").update({ cover_image_url: hafhUrl }).eq("id", id)
         fromHafH++
-      } else if ((notFound || !hafhUrl) && !googleQuotaExceeded) {
-        // Step 2: Google 備援
-        await new Promise(r => setTimeout(r, 300)) // 避免打太快
-        const googleUrl = await fetchFromGoogle(name_en, prefecture)
-        if (googleUrl === "QUOTA_EXCEEDED") {
-          googleQuotaExceeded = true
-        } else if (googleUrl) {
-          await supabase.from("properties").update({ cover_image_url: googleUrl }).eq("id", id)
+      } else {
+        // Step 2: DuckDuckGo 圖片搜尋
+        await new Promise(r => setTimeout(r, 300))
+        const ddgUrl = await fetchFromDDG(name_en, prefecture)
+        if (ddgUrl) {
+          await supabase.from("properties").update({ cover_image_url: ddgUrl }).eq("id", id)
           fromGoogle++
-        } else {
-          failed++
+          return
         }
-      } else if (googleQuotaExceeded) {
+        // Step 3: Google Custom Search 備援
+        if (!googleQuotaExceeded) {
+          const googleUrl = await fetchFromGoogle(name_en, prefecture)
+          if (googleUrl === "QUOTA_EXCEEDED") {
+            googleQuotaExceeded = true
+          } else if (googleUrl) {
+            await supabase.from("properties").update({ cover_image_url: googleUrl }).eq("id", id)
+            fromGoogle++
+            return
+          }
+        }
         failed++
       }
 
