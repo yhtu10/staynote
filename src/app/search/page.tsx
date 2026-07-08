@@ -168,36 +168,49 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   // Step 0: 旅宿名稱直接比對（最高優先）
   // 條件：沒有偵測到地名（country/prefecture），且 query 是英數字旅宿名稱格式
   // 避免「東京」「大阪」等地名把名稱含地名的旅宿錯誤置頂
-  const looksLikeName = !country && !prefecture && query.length >= 2 && /^[\w\s\-\.\/]+$/.test(query)
+  const looksLikeName = !country && !prefecture && query.length >= 2
   let nameMatchPropIds: number[] = []
   if (looksLikeName) {
-    const words = query.trim().toLowerCase().split(/\s+/).filter(w => w.length >= 2)
+    const isChinese = /[一-鿿]/.test(query)
 
-    // 優先：字首邊界比對（名稱以第一個字開頭，或某個單字以它開頭）
-    // 適用 "omo" → OMO3/OMO5/OMO7，避免比到 Tomonoura/Kamomosi
-    if (words.length > 0) {
-      const first = words[0]
-      let boundaryQ = supabase
+    if (isChinese) {
+      // 中文名稱：直接模糊比對 name_zh
+      const { data: zhMatches } = await supabase
         .from("properties")
         .select("id")
-        .or(`name_en.ilike.${first}%,name_en.ilike.% ${first}%`)
+        .ilike("name_zh", `%${query}%`)
+        .eq("status", "approved")
         .limit(20)
-      // 其餘字做 AND 過濾
-      for (const w of words.slice(1)) {
-        boundaryQ = boundaryQ.ilike("name_en", `%${w}%`)
-      }
-      const { data: boundaryMatches } = await boundaryQ
-      nameMatchPropIds = (boundaryMatches ?? []).map(p => p.id)
-    }
+      nameMatchPropIds = (zhMatches ?? []).map(p => p.id)
+    } else if (/^[\w\s\-\.\/]+$/.test(query)) {
+      const words = query.trim().toLowerCase().split(/\s+/).filter(w => w.length >= 2)
 
-    // 退而求其次：多字 AND 模糊比對（"omo osaka" → name 含 omo 且含 osaka）
-    if (nameMatchPropIds.length === 0 && words.length > 0) {
-      let fuzzyQ = supabase.from("properties").select("id").limit(20)
-      for (const w of words) {
-        fuzzyQ = fuzzyQ.ilike("name_en", `%${w}%`)
+      // 優先：字首邊界比對（名稱以第一個字開頭，或某個單字以它開頭）
+      // 適用 "omo" → OMO3/OMO5/OMO7，避免比到 Tomonoura/Kamomosi
+      if (words.length > 0) {
+        const first = words[0]
+        let boundaryQ = supabase
+          .from("properties")
+          .select("id")
+          .or(`name_en.ilike.${first}%,name_en.ilike.% ${first}%`)
+          .eq("status", "approved")
+          .limit(20)
+        for (const w of words.slice(1)) {
+          boundaryQ = boundaryQ.ilike("name_en", `%${w}%`)
+        }
+        const { data: boundaryMatches } = await boundaryQ
+        nameMatchPropIds = (boundaryMatches ?? []).map(p => p.id)
       }
-      const { data: fuzzyMatches } = await fuzzyQ
-      nameMatchPropIds = (fuzzyMatches ?? []).map(p => p.id)
+
+      // 退而求其次：多字 AND 模糊比對
+      if (nameMatchPropIds.length === 0 && words.length > 0) {
+        let fuzzyQ = supabase.from("properties").select("id").eq("status", "approved").limit(20)
+        for (const w of words) {
+          fuzzyQ = fuzzyQ.ilike("name_en", `%${w}%`)
+        }
+        const { data: fuzzyMatches } = await fuzzyQ
+        nameMatchPropIds = (fuzzyMatches ?? []).map(p => p.id)
+      }
     }
   }
 
@@ -289,8 +302,9 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   if (nameMatchPropIds.length > 0) {
     const { data: nameProps } = await supabase
       .from("properties")
-      .select("id, name_en, country, prefecture, cover_image_url")
+      .select("id, name_en, name_zh, country, prefecture, cover_image_url")
       .in("id", nameMatchPropIds)
+      .eq("status", "approved")
     const avgRatings = await fetchAvgRatings(nameMatchPropIds)
 
     // fetchAvgRatings 已整合用戶評論 + HafH ai_rating 平均
@@ -362,8 +376,9 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   // Step 5: fetch property info
   const { data: properties } = await supabase
     .from("properties")
-    .select("id, name_en, country, prefecture, cover_image_url")
+    .select("id, name_en, name_zh, country, prefecture, cover_image_url")
     .in("id", sortedPropIds)
+    .eq("status", "approved")
 
   const propMap = new Map((properties ?? []).map(p => [p.id, p]))
 
@@ -472,7 +487,7 @@ async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise
 
   const topStoryIds = sortedPropIds.map(id => propScores.get(id)!.topStoryId)
   const [{ data: properties }, { data: stories }, { data: tagRows }] = await Promise.all([
-    supabase.from("properties").select("id, name_en, country, prefecture, cover_image_url").in("id", sortedPropIds),
+    supabase.from("properties").select("id, name_en, name_zh, country, prefecture, cover_image_url").in("id", sortedPropIds).eq("status", "approved"),
     supabase.from("travel_stories").select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email, ai_rating").in("id", topStoryIds),
     supabase.from("story_tags").select("story_id, tag").in("story_id", topStoryIds).limit(100),
   ])

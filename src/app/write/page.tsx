@@ -358,7 +358,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
-type HotelSuggestion = { id: number; name_en: string; prefecture: string; country: string; cover_image_url?: string | null }
+type HotelSuggestion = { id: number; name_en: string; name_zh?: string | null; prefecture: string; country: string; cover_image_url?: string | null }
 
 // --- Main page ---
 export default function WritePage() {
@@ -374,16 +374,19 @@ export default function WritePage() {
       if (hotelId && !p.get('edit')) {
         fetch(`/api/hotels/${hotelId}`)
           .then(r => r.json())
-          .then(h => { if (h?.id) setSelectedHotel({ id: h.id, name: h.name_en, prefecture: h.prefecture, country: h.country, cover_image_url: h.cover_image_url }) })
+          .then(h => { if (h?.id) setSelectedHotel({ id: h.id, name: h.name_en, name_zh: h.name_zh, prefecture: h.prefecture, country: h.country, cover_image_url: h.cover_image_url }) })
       }
     }
   }, [])
 
   // Hotel search
   const [hotelQuery, setHotelQuery] = useState('')
-  const [selectedHotel, setSelectedHotel] = useState<{ id: number; name: string; prefecture?: string; country?: string; cover_image_url?: string | null } | null>(null)
+  const [selectedHotel, setSelectedHotel] = useState<{ id: number; name: string; name_zh?: string | null; prefecture?: string; country?: string; cover_image_url?: string | null } | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hotelSuggestions, setHotelSuggestions] = useState<HotelSuggestion[]>([])
+  const [addingHotel, setAddingHotel] = useState(false)
+  const [newHotelForm, setNewHotelForm] = useState({ name_zh: '', name_en: '', prefecture: '', country: '' })
+  const [addingHotelLoading, setAddingHotelLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [savedDraftId, setSavedDraftId] = useState<number | null>(null)
@@ -667,33 +670,121 @@ export default function WritePage() {
             你住的是哪間飯店？
           </label>
           <div className="relative">
-            {!selectedHotel && (
+            {!selectedHotel && !addingHotel && (
               <input
                 type="text"
                 value={hotelQuery}
                 onChange={(e) => { setHotelQuery(e.target.value); setShowSuggestions(true) }}
                 onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                placeholder="輸入飯店名稱搜尋…"
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                placeholder="輸入飯店名稱（中文或英文）…"
                 className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
               />
             )}
-            {showSuggestions && hotelSuggestions.length > 0 && (
+            {showSuggestions && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-sm z-10 overflow-hidden">
                 {hotelSuggestions.map((h) => (
                   <button
                     key={h.id}
                     type="button"
-                    onMouseDown={() => { setHotelQuery(''); setSelectedHotel({ id: h.id, name: h.name_en, prefecture: h.prefecture, country: h.country, cover_image_url: h.cover_image_url }); setShowSuggestions(false) }}
+                    onMouseDown={() => {
+                      setHotelQuery('')
+                      setSelectedHotel({ id: h.id, name: h.name_en, name_zh: h.name_zh, prefecture: h.prefecture, country: h.country, cover_image_url: h.cover_image_url })
+                      setShowSuggestions(false)
+                    }}
                     className="w-full text-left px-4 py-3 text-sm text-neutral-700 hover:bg-neutral-50 border-b border-neutral-100 last:border-0"
                   >
-                    <span>{h.name_en}</span>
-                    <span className="text-xs text-neutral-400 ml-2">{h.prefecture}, {h.country}</span>
+                    <span className="font-medium">{h.name_zh || h.name_en}</span>
+                    {h.name_zh && <span className="text-xs text-neutral-400 ml-2">{h.name_en}</span>}
+                    <span className="text-xs text-neutral-400 ml-2">{h.prefecture}{h.prefecture && h.country ? ', ' : ''}{h.country}</span>
                   </button>
                 ))}
+                {hotelQuery.length >= 2 && (
+                  <button
+                    type="button"
+                    onMouseDown={() => {
+                      setAddingHotel(true)
+                      setNewHotelForm({ name_zh: hotelQuery, name_en: '', prefecture: '', country: '' })
+                      setShowSuggestions(false)
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 font-medium"
+                  >
+                    ＋ 找不到「{hotelQuery}」？手動新增旅宿
+                  </button>
+                )}
               </div>
             )}
           </div>
+
+          {/* 手動新增旅宿表單 */}
+          {addingHotel && !selectedHotel && (
+            <div className="mt-3 border border-neutral-200 rounded-2xl p-4 flex flex-col gap-3">
+              <p className="text-xs text-neutral-500 font-medium">新增旅宿資訊</p>
+              <input
+                type="text"
+                value={newHotelForm.name_zh}
+                onChange={e => setNewHotelForm(f => ({ ...f, name_zh: e.target.value }))}
+                placeholder="飯店中文名稱（必填）"
+                className="w-full border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-neutral-400"
+              />
+              <input
+                type="text"
+                value={newHotelForm.name_en}
+                onChange={e => setNewHotelForm(f => ({ ...f, name_en: e.target.value }))}
+                placeholder="English name（選填）"
+                className="w-full border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-neutral-400"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={newHotelForm.prefecture}
+                  onChange={e => setNewHotelForm(f => ({ ...f, prefecture: e.target.value }))}
+                  placeholder="縣市 / 城市"
+                  className="border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-neutral-400"
+                />
+                <input
+                  type="text"
+                  value={newHotelForm.country}
+                  onChange={e => setNewHotelForm(f => ({ ...f, country: e.target.value }))}
+                  placeholder="國家（如 Taiwan）"
+                  className="border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-neutral-400"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={addingHotelLoading || !newHotelForm.name_zh.trim()}
+                  onClick={async () => {
+                    setAddingHotelLoading(true)
+                    const res = await fetch('/api/hotels', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(newHotelForm),
+                    })
+                    const data = await res.json()
+                    if (data.id) {
+                      setSelectedHotel({ id: data.id, name: data.name_en, name_zh: data.name_zh, prefecture: data.prefecture, country: data.country, cover_image_url: data.cover_image_url })
+                      setAddingHotel(false)
+                      setHotelQuery('')
+                    }
+                    setAddingHotelLoading(false)
+                  }}
+                  className="flex-1 bg-neutral-900 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-40"
+                >
+                  {addingHotelLoading ? '新增中…' : '確認新增'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAddingHotel(false); setHotelQuery('') }}
+                  className="px-4 border border-neutral-200 rounded-xl text-sm text-neutral-500"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 已選擇飯店顯示 */}
           {selectedHotel && (
             <div className="mt-3 flex items-center gap-3 border border-emerald-200 bg-emerald-50 rounded-2xl overflow-hidden">
               {selectedHotel.cover_image_url ? (
@@ -702,7 +793,8 @@ export default function WritePage() {
                 <div className="w-20 h-16 bg-emerald-100 flex items-center justify-center flex-shrink-0 text-2xl">🏨</div>
               )}
               <div className="flex-1 min-w-0 py-2 pr-3">
-                <p className="text-sm font-semibold text-neutral-800 truncate">{selectedHotel.name}</p>
+                <p className="text-sm font-semibold text-neutral-800 truncate">{selectedHotel.name_zh || selectedHotel.name}</p>
+                {selectedHotel.name_zh && <p className="text-xs text-neutral-400 truncate">{selectedHotel.name}</p>}
                 {(selectedHotel.prefecture || selectedHotel.country) && (
                   <p className="text-xs text-neutral-500 mt-0.5">{selectedHotel.prefecture} · {selectedHotel.country}</p>
                 )}

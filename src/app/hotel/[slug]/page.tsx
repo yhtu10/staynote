@@ -34,7 +34,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
     { data: userReviews },
     { data: allAiRatings },
   ] = await Promise.all([
-    supabase.from("properties").select("id, name_en, country, prefecture, cover_image_url").eq("id", propertyId).single(),
+    supabase.from("properties").select("id, name_en, name_zh, country, prefecture, cover_image_url, status").eq("id", propertyId).single(),
     supabase.from("travel_stories")
       .select("id, title, zh_tw_title, description, zh_tw_description, hafh_url, likes_count, helpful_count, published_at, author_email, ai_rating")
       .eq("property_id", propertyId)
@@ -58,7 +58,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
     ? await supabase.from("story_tags").select("tag, story_id").in("story_id", storyIds.slice(0, 200))
     : { data: [] }
 
-  if (!property) notFound()
+  if (!property || (property as { status?: string }).status === "pending") notFound()
 
   // Fetch display names for user reviews
   const userIds = [...new Set((userReviews ?? []).map((r) => r.user_id).filter(Boolean))]
