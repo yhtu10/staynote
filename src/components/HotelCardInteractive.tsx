@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { CardData } from "@/lib/card-utils"
 
 type Reply = { author: string; content: string; date: string }
@@ -8,12 +8,19 @@ type Reply = { author: string; content: string; date: string }
 export type { CardData }
 
 export default function HotelCardInteractive({ card, isCurated = false }: { card: CardData; isCurated?: boolean }) {
+  const storageKey = `vote_${card.type}_${card.id}`
   const [helpful, setHelpful] = useState<"up" | "down" | null>(null)
   const [helpfulCount, setHelpfulCount] = useState(card.helpfulCount ?? 0)
   const [showReplies, setShowReplies] = useState(false)
   const [replies, setReplies] = useState<Reply[]>(card.replies ?? [])
   const [showReplyInput, setShowReplyInput] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // 從 localStorage 還原之前的投票狀態
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey)
+    if (saved === "up" || saved === "down") setHelpful(saved)
+  }, [storageKey])
 
   function copyShareLink() {
     const path = card.type === "review" ? `/review/${card.id}` : `/story/${card.id}`
@@ -25,14 +32,29 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
   }
   const [replyText, setReplyText] = useState("")
 
-  function handleHelpful(type: "up" | "down") {
+  async function handleHelpful(type: "up" | "down") {
+    if (card.type !== "review") return // 只有用戶評論才計票
     if (helpful === type) {
+      // 取消投票
       setHelpful(null)
       if (type === "up") setHelpfulCount((c) => c - 1)
+      localStorage.removeItem(storageKey)
+      await fetch("/api/reviews/helpful", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ review_id: card.id, vote: type }),
+      })
     } else {
+      // 換票：先扣掉舊票
       if (helpful === "up") setHelpfulCount((c) => c - 1)
       if (type === "up") setHelpfulCount((c) => c + 1)
       setHelpful(type)
+      localStorage.setItem(storageKey, type)
+      await fetch("/api/reviews/helpful", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ review_id: card.id, vote: type }),
+      })
     }
   }
 

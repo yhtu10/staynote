@@ -41,7 +41,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
       .order("likes_count", { ascending: false })
       .limit(30),
     supabase.from("reviews")
-      .select("id, user_id, author_name, author_email, rating, positive, negative, check_in_month, purposes, bed_type, recommend_for, created_at")
+      .select("id, user_id, author_name, author_email, rating, positive, negative, check_in_month, purposes, bed_type, recommend_for, created_at, helpful_count, not_helpful_count")
       .eq("property_id", propertyId)
       .eq("status", "approved")
       .order("created_at", { ascending: false })
@@ -106,6 +106,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
   const reviewCount = (userReviews ?? []).length
   const aiCount = aiRatingValues.length
   const totalCount = allRatingValues.length
+
 
   const googleHotelsUrl = `https://www.google.com/travel/hotels/search?q=${encodeURIComponent(property.name_en)}`
   const mapQuery = encodeURIComponent(`${property.name_en} ${property.prefecture} ${property.country}`)
@@ -285,6 +286,25 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
             </Link>
           </div>
 
+          {/* 評分分佈 */}
+          {reviewCount > 0 && (
+            <div style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "16px 20px", marginBottom: "12px" }}>
+              {ratingDist.map(({ star, count }) => {
+                const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0
+                return (
+                  <div key={star} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "11px", color: "#888", width: "16px", textAlign: "right" }}>{star}</span>
+                    <span style={{ color: "#F5A623", fontSize: "11px" }}>★</span>
+                    <div style={{ flex: 1, background: "#F0F0F0", borderRadius: "4px", height: "6px", overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, background: "#F5A623", height: "100%", borderRadius: "4px" }} />
+                    </div>
+                    <span style={{ fontSize: "11px", color: "#AAA", width: "24px" }}>{count}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {(userReviews ?? []).length === 0 ? (
             <div style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "40px 20px", textAlign: "center" }}>
               <p style={{ fontSize: "14px", color: "#AAA" }}>還沒有評論，成為第一個分享的旅人</p>
@@ -314,7 +334,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                   negative: negative || undefined,
                   recommendFor: recommendFor.length > 0 ? recommendFor : undefined,
                   date: review.created_at ? new Date(review.created_at).toISOString().slice(0, 7) : undefined,
-                  helpfulCount: 0,
+                  helpfulCount: review.helpful_count ?? 0,
                 }
 
                 return <HotelCardInteractive key={review.id} card={card} />

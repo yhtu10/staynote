@@ -66,6 +66,16 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const property = (review.properties as unknown) as { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null } | null
 
+  // 同旅宿其他評論
+  const { data: otherReviews } = await supabase
+    .from("reviews")
+    .select("id, author_name, user_id, rating, positive, created_at")
+    .eq("property_id", review.property_id)
+    .eq("status", "approved")
+    .neq("id", reviewId)
+    .order("created_at", { ascending: false })
+    .limit(3)
+
   // 取顯示名稱
   let displayName = review.author_name || "匿名旅人"
   if (review.user_id) {
@@ -150,6 +160,29 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
             </span>
           </div>
         </div>
+
+        {/* 同旅宿其他評論 */}
+        {(otherReviews ?? []).length > 0 && (
+          <div style={{ marginTop: 32 }}>
+            <p style={{ fontSize: 11, color: "#AAA", letterSpacing: "0.08em", marginBottom: 12 }}>同一旅宿的其他評論</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {(otherReviews ?? []).map((r) => {
+                const name = r.author_name || "匿名旅人"
+                const preview = (r.positive || "").slice(0, 80)
+                const full = Math.round(r.rating ?? 0)
+                return (
+                  <Link key={r.id} href={`/review/${r.id}`} style={{ background: "white", border: "1px solid #EBEBEB", borderRadius: 16, padding: "14px 16px", textDecoration: "none", display: "block" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{name}</span>
+                      {r.rating && <span style={{ color: "#F5A623", fontSize: 12 }}>{"★".repeat(full)}{"☆".repeat(5 - full)}</span>}
+                    </div>
+                    {preview && <p style={{ fontSize: 12, color: "#666", lineHeight: 1.6 }}>{preview}{(r.positive || "").length > 80 ? "…" : ""}</p>}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 回到旅宿頁 */}
         {property && (
