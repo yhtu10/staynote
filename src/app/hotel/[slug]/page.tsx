@@ -399,7 +399,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
             <p style={{ fontSize: "14px", fontWeight: 600, color: "#111", marginBottom: "4px" }}>住過這裡？</p>
             <p style={{ fontSize: "12px", color: "#AAA" }}>分享你的評論，幫助其他旅人做決定</p>
           </div>
-          <Link href="/write"
+          <Link href={`/write?hotel=${propertyId}`}
             style={{ background: "#111", color: "white", fontSize: "13px", fontWeight: 600, padding: "10px 20px", borderRadius: "20px", textDecoration: "none", whiteSpace: "nowrap" }}>
             寫評論
           </Link>

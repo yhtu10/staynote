@@ -266,6 +266,12 @@ export default function WritePage() {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search)
       setEditId(p.get('edit'))
+      const hotelId = p.get('hotel')
+      if (hotelId && !p.get('edit')) {
+        fetch(`/api/hotels/${hotelId}`)
+          .then(r => r.json())
+          .then(h => { if (h?.id) setSelectedHotel({ id: h.id, name: h.name_en }) })
+      }
     }
   }, [])
 
