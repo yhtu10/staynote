@@ -121,6 +121,26 @@ function extractPrefecture(query: string): string | null {
   return null
 }
 
+async function fetchAvgRatings(propIds: number[]): Promise<Map<number, number>> {
+  if (propIds.length === 0) return new Map()
+  const { data } = await supabase
+    .from("reviews")
+    .select("property_id, rating")
+    .in("property_id", propIds)
+    .eq("status", "approved")
+  const totals = new Map<number, { sum: number; count: number }>()
+  for (const r of data ?? []) {
+    if (!r.rating) continue
+    const cur = totals.get(r.property_id) ?? { sum: 0, count: 0 }
+    totals.set(r.property_id, { sum: cur.sum + r.rating, count: cur.count + 1 })
+  }
+  const result = new Map<number, number>()
+  for (const [id, { sum, count }] of totals) {
+    result.set(id, Math.round((sum / count) * 10) / 10)
+  }
+  return result
+}
+
 async function searchHotels(query: string): Promise<{ results: SearchResult[]; isFallback: boolean; nameMatch?: { hotels: SearchResult[]; prefecture: string | null; country: string | null } }> {
   const country = extractCountry(query)
   const prefecture = extractPrefecture(query)
@@ -229,7 +249,12 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
       .from("properties")
       .select("id, name_en, country, prefecture, cover_image_url")
       .in("id", nameMatchPropIds)
-    const hotels = (nameProps ?? []).map(p => ({ property: p, stories: [], tags: [] }))
+    const avgRatings = await fetchAvgRatings(nameMatchPropIds)
+    const hotels = (nameProps ?? []).map(p => ({
+      property: { ...p, avg_rating: avgRatings.get(p.id) ?? null },
+      stories: [],
+      tags: [],
+    }))
     const firstProp = nameProps?.[0]
     return {
       results: [],
@@ -305,21 +330,24 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
     tagsByStory.get(row.story_id)!.push(row.tag)
   }
 
-  // Step 8: assemble final results in similarity order
+  // Step 8: fetch avg ratings for all properties
+  const avgRatings = await fetchAvgRatings(sortedPropIds)
+
+  // Step 9: assemble final results in similarity order
   const finalResults: SearchResult[] = []
   for (const propId of sortedPropIds) {
     const property = propMap.get(propId)
     if (!property) continue
     const topStoryId = propScores.get(propId)!.topStoryId
+    const propertyWithRating = { ...property, avg_rating: avgRatings.get(propId) ?? null }
     if (topStoryId === -1) {
-      // 名稱比對到但無 story，仍顯示旅宿卡片（無評論）
-      finalResults.push({ property, stories: [], tags: [] })
+      finalResults.push({ property: propertyWithRating, stories: [], tags: [] })
       continue
     }
     const topStory = storyMap.get(topStoryId)
     if (!topStory) continue
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    finalResults.push({ property, stories: [{ ...topStory, ai_rating: (topStory as any).ai_rating ?? null }], tags: tagsByStory.get(topStoryId)?.slice(0, 3) ?? [] })
+    finalResults.push({ property: propertyWithRating, stories: [{ ...topStory, ai_rating: (topStory as any).ai_rating ?? null }], tags: tagsByStory.get(topStoryId)?.slice(0, 3) ?? [] })
   }
   return { results: finalResults, isFallback, nameMatch: undefined }
 }
@@ -370,7 +398,7 @@ function extractKeywords(query: string): string[] {
 }
 
 type StoryRowSimple = { story_id: number; property_id: number; similarity: number }
-type SearchResult = { property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null; ai_rating: number | null }[]; tags: string[] }
+type SearchResult = { property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null; avg_rating?: number | null }; stories: { id: number; title: string | null; zh_tw_title: string | null; zh_tw_description: string | null; description: string | null; property_id: number; likes_count: number | null; hafh_url: string | null; cover_image_url: string | null; author_email: string | null; ai_rating: number | null }[]; tags: string[] }
 
 async function assembleResults(storyRows: StoryRowSimple[], limit = 20): Promise<SearchResult[]> {
   const propScores = new Map<number, { topStoryId: number; similarity: number }>()

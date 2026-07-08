@@ -6,7 +6,7 @@ import { useState } from "react"
 const GENERIC_OGP = "https://www.hafh.com/images/ogp/ogp-en.png"
 
 type Result = {
-  property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null }
+  property: { id: number; name_en: string; country: string; prefecture: string; cover_image_url?: string | null; avg_rating?: number | null }
   stories: {
     id: number
     zh_tw_description: string | null
@@ -106,13 +106,16 @@ export default function SearchResults({ results }: { results: Result[] }) {
                   )}
 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    {topStory?.ai_rating ? (
-                      <span style={{ color: "#F5A623", fontSize: "12px" }}>
-                        {"★".repeat(topStory.ai_rating)}{"☆".repeat(5 - topStory.ai_rating)}
-                      </span>
-                    ) : (
-                      <span style={{ color: "#DDD", fontSize: "12px" }}>☆☆☆☆☆</span>
-                    )}
+                    {(() => {
+                      const rating = property.avg_rating ?? topStory?.ai_rating ?? null
+                      if (!rating) return <span style={{ color: "#DDD", fontSize: "12px" }}>☆☆☆☆☆</span>
+                      const full = Math.round(rating)
+                      return (
+                        <span style={{ color: "#F5A623", fontSize: "12px" }}>
+                          {"★".repeat(full)}{"☆".repeat(5 - full)}
+                        </span>
+                      )
+                    })()}
                     {topStory && <span style={{ fontSize: "10px", color: "#CCC" }}>@{authorRaw}</span>}
                   </div>
               </div>
