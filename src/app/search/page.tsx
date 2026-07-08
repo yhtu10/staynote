@@ -250,9 +250,22 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
       .select("id, name_en, country, prefecture, cover_image_url")
       .in("id", nameMatchPropIds)
     const avgRatings = await fetchAvgRatings(nameMatchPropIds)
+
+    // 撈每間旅宿的 top story（含 ai_rating）供星星顯示
+    const { data: nameStories } = await supabase
+      .from("travel_stories")
+      .select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email, ai_rating")
+      .in("property_id", nameMatchPropIds)
+      .order("likes_count", { ascending: false })
+      .limit(nameMatchPropIds.length * 3)
+    const topStoryByProp = new Map<number, typeof nameStories extends (infer T)[] | null ? T : never>()
+    for (const s of nameStories ?? []) {
+      if (!topStoryByProp.has(s.property_id)) topStoryByProp.set(s.property_id, s)
+    }
+
     const hotels = (nameProps ?? []).map(p => ({
       property: { ...p, avg_rating: avgRatings.get(p.id) ?? null },
-      stories: [],
+      stories: topStoryByProp.has(p.id) ? [{ ...topStoryByProp.get(p.id)!, ai_rating: topStoryByProp.get(p.id)?.ai_rating ?? null }] : [],
       tags: [],
     }))
     const firstProp = nameProps?.[0]
