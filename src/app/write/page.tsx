@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSession, signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 
 // --- Web Speech API types ---
 interface ISpeechRecognition extends EventTarget {
@@ -163,14 +163,16 @@ type HotelSuggestion = { id: number; name_en: string; prefecture: string; countr
 
 // --- Main page ---
 export default function WritePage() {
-  return <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#AAA' }}>載入中…</p></div>}><WritePageInner /></Suspense>
-}
-
-function WritePageInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const editId = searchParams.get('edit') // 編輯模式：?edit=123
+  const [editId, setEditId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search)
+      setEditId(p.get('edit'))
+    }
+  }, [])
 
   // Hotel search
   const [hotelQuery, setHotelQuery] = useState('')
