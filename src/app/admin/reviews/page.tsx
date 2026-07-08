@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useSession } from "next-auth/react"
 
 type Review = {
   id: number
@@ -26,8 +25,12 @@ function starStr(r: number) {
   return "★".repeat(r) + "☆".repeat(5 - r)
 }
 
+const SESSION_KEY = "staynote_admin_auth"
+
 export default function AdminReviewsPage() {
-  const { data: session, status } = useSession()
+  const [authed, setAuthed] = useState(false)
+  const [pwInput, setPwInput] = useState("")
+  const [pwError, setPwError] = useState("")
   const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending")
   const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(false)
@@ -35,21 +38,45 @@ export default function AdminReviewsPage() {
   const [rejectReason, setRejectReason] = useState("")
   const [acting, setActing] = useState(false)
 
+  useEffect(() => {
+    if (sessionStorage.getItem(SESSION_KEY) === "1") setAuthed(true)
+  }, [])
+
+  async function handleLogin() {
+    setPwError("")
+    const res = await fetch("/api/admin/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pwInput }),
+    })
+    if (res.ok) {
+      sessionStorage.setItem(SESSION_KEY, "1")
+      setAuthed(true)
+    } else {
+      setPwError("密碼錯誤")
+    }
+  }
+
   async function load(s: string) {
     setLoading(true)
-    const res = await fetch(`/api/admin/reviews?status=${s}`)
+    const res = await fetch(`/api/admin/reviews?status=${s}`, {
+      headers: { "x-admin-auth": sessionStorage.getItem(SESSION_KEY) ?? "" },
+    })
     const data = await res.json()
     setReviews(Array.isArray(data) ? data : [])
     setLoading(false)
   }
 
-  useEffect(() => { load(tab) }, [tab])
+  useEffect(() => { if (authed) load(tab) }, [authed, tab])
 
   async function act(id: number, action: "approve" | "reject", reason?: string) {
     setActing(true)
     await fetch(`/api/admin/reviews/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-auth": sessionStorage.getItem(SESSION_KEY) ?? "",
+      },
       body: JSON.stringify({ action, rejection_reason: reason }),
     })
     setActing(false)
@@ -58,8 +85,31 @@ export default function AdminReviewsPage() {
     load(tab)
   }
 
-  if (status === "loading") return <div style={{ padding: "40px", textAlign: "center", color: "#AAA" }}>載入中…</div>
-  if (!session) return <div style={{ padding: "40px", textAlign: "center" }}>請先登入</div>
+  // --- Password gate ---
+  if (!authed) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#F5F5F5", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}>
+        <div style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "40px 32px", maxWidth: "360px", width: "100%" }}>
+          <p style={{ fontSize: "20px", fontWeight: 700, color: "#111", marginBottom: "6px" }}>StayNote 後台</p>
+          <p style={{ fontSize: "13px", color: "#AAA", marginBottom: "24px" }}>請輸入管理員密碼</p>
+          <input
+            type="password"
+            value={pwInput}
+            onChange={e => setPwInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+            placeholder="密碼"
+            autoFocus
+            style={{ width: "100%", border: "1px solid #E0E0E0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
+          />
+          {pwError && <p style={{ fontSize: "12px", color: "#E74C3C", marginBottom: "10px" }}>{pwError}</p>}
+          <button onClick={handleLogin}
+            style={{ width: "100%", background: "#111", color: "white", border: "none", borderRadius: "10px", padding: "12px 0", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            登入
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const TAB_LABELS = { pending: "待審核", approved: "已通過", rejected: "已退回" }
   const TAB_COLORS: Record<string, string> = { pending: "#F5A623", approved: "#27AE60", rejected: "#E74C3C" }
@@ -72,17 +122,10 @@ export default function AdminReviewsPage() {
       </nav>
 
       <main style={{ maxWidth: "800px", margin: "0 auto", padding: "24px 20px 60px" }}>
-        {/* Tabs */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
           {(["pending", "approved", "rejected"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              style={{
-                padding: "8px 18px", borderRadius: "20px", fontSize: "13px", fontWeight: 600,
-                border: "none", cursor: "pointer", fontFamily: "inherit",
-                background: tab === t ? "#111" : "white",
-                color: tab === t ? "white" : "#666",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.06)"
-              }}>
+              style={{ padding: "8px 18px", borderRadius: "20px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t ? "#111" : "white", color: tab === t ? "white" : "#666", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               {TAB_LABELS[t]}
             </button>
           ))}
@@ -99,7 +142,6 @@ export default function AdminReviewsPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {reviews.map((r) => (
             <div key={r.id} style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "20px 24px" }}>
-              {/* Header */}
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
                 <div>
                   <p style={{ fontSize: "15px", fontWeight: 700, color: "#111", marginBottom: "3px" }}>
@@ -127,7 +169,6 @@ export default function AdminReviewsPage() {
                 </div>
               </div>
 
-              {/* Content */}
               <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
                 <span style={{ fontSize: "11px", color: "#27AE60", fontWeight: 500, flexShrink: 0, marginTop: "2px" }}>✓ 滿意</span>
                 <p style={{ fontSize: "13px", color: "#333", lineHeight: 1.7 }}>{r.positive}</p>
@@ -149,7 +190,6 @@ export default function AdminReviewsPage() {
                 更新：{new Date(r.updated_at).toLocaleString("zh-TW")}
               </p>
 
-              {/* Actions */}
               {tab === "pending" && (
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   <button onClick={() => act(r.id, "approve")} disabled={acting}
@@ -160,22 +200,14 @@ export default function AdminReviewsPage() {
                     style={{ flex: 1, background: "white", color: "#E74C3C", border: "1.5px solid #FECACA", borderRadius: "10px", padding: "9px 0", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                     × 退回
                   </button>
-                  <Link href={`/write?edit=${r.id}`} style={{ fontSize: "12px", color: "#AAA", textDecoration: "none" }}>
-                    代為編輯
-                  </Link>
                 </div>
               )}
 
-              {/* Reject reason input */}
               {rejectId === r.id && (
                 <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <textarea
-                    value={rejectReason}
-                    onChange={e => setRejectReason(e.target.value)}
-                    placeholder="請填寫退回原因，將顯示給用戶"
-                    rows={2}
-                    style={{ border: "1px solid #E0E0E0", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", resize: "none", fontFamily: "inherit", outline: "none" }}
-                  />
+                  <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                    placeholder="請填寫退回原因，將顯示給用戶" rows={2}
+                    style={{ border: "1px solid #E0E0E0", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", resize: "none", fontFamily: "inherit", outline: "none" }} />
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button onClick={() => act(r.id, "reject", rejectReason)} disabled={acting || !rejectReason.trim()}
                       style={{ flex: 1, background: "#E74C3C", color: "white", border: "none", borderRadius: "8px", padding: "8px 0", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: rejectReason.trim() ? 1 : 0.4 }}>

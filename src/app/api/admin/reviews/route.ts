@@ -1,25 +1,19 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SECRET_KEY!
 )
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "").split(",").map(e => e.trim()).filter(Boolean)
-
-function isAdmin(email: string) {
-  return ADMIN_EMAILS.includes(email)
+function checkAdmin(req: NextRequest) {
+  // 支援兩種驗證方式：x-admin-auth header 或 Authorization Bearer
+  const token = req.headers.get("x-admin-auth") ?? req.headers.get("authorization")?.replace("Bearer ", "")
+  return token === "1" && !!process.env.ADMIN_PASSWORD
 }
 
-// GET /api/admin/reviews?status=pending
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email || !isAdmin(session.user.email)) {
-    return NextResponse.json({ error: "無權限" }, { status: 403 })
-  }
+  if (!checkAdmin(req)) return NextResponse.json({ error: "無權限" }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get("status") ?? "pending"
@@ -33,7 +27,6 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Attach property names
   const propIds = [...new Set((reviews ?? []).map(r => r.property_id))]
   const { data: properties } = propIds.length > 0
     ? await supabase.from("properties").select("id, name_en").in("id", propIds)
