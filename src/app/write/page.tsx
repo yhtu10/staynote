@@ -251,13 +251,9 @@ export default function WritePage() {
         setHasKids(data.has_kids ?? false)
         setRecommendFor(data.recommend_for ?? [])
         if (data.property_id) {
-          // 查飯店名稱
-          fetch(`/api/hotels/search?id=${data.property_id}`)
+          fetch(`/api/hotels/${data.property_id}`)
             .then(r => r.json())
-            .then(props => {
-              const p = Array.isArray(props) ? props[0] : props
-              if (p) setSelectedHotel({ id: p.id, name: p.name_en })
-            })
+            .then(p => { if (p?.id) setSelectedHotel({ id: p.id, name: p.name_en }) })
         }
         if (data.status === 'rejected') {
           setSubmitError(`上次送審被退回：${data.rejection_reason ?? '請修改後重新送出'}`)
