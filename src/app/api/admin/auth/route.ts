@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
-  const { password } = await req.json()
+  const { email, password } = await req.json()
   const adminPassword = process.env.ADMIN_PASSWORD
-  if (!adminPassword) return NextResponse.json({ error: "未設定" }, { status: 500 })
-  if (password !== adminPassword) return NextResponse.json({ error: "密碼錯誤" }, { status: 401 })
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map(e => e.trim()).filter(Boolean)
+
+  if (!adminPassword) return NextResponse.json({ error: "伺服器未設定" }, { status: 500 })
+  if (!adminEmails.includes(email?.trim())) return NextResponse.json({ error: "帳號或密碼錯誤" }, { status: 401 })
+  if (password !== adminPassword) return NextResponse.json({ error: "帳號或密碼錯誤" }, { status: 401 })
+
   return NextResponse.json({ ok: true })
 }

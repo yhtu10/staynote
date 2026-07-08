@@ -29,6 +29,7 @@ const SESSION_KEY = "staynote_admin_auth"
 
 export default function AdminReviewsPage() {
   const [authed, setAuthed] = useState(false)
+  const [emailInput, setEmailInput] = useState("")
   const [pwInput, setPwInput] = useState("")
   const [pwError, setPwError] = useState("")
   const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending")
@@ -47,7 +48,7 @@ export default function AdminReviewsPage() {
     const res = await fetch("/api/admin/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pwInput }),
+      body: JSON.stringify({ email: emailInput.trim(), password: pwInput }),
     })
     if (res.ok) {
       sessionStorage.setItem(SESSION_KEY, "1")
@@ -91,14 +92,21 @@ export default function AdminReviewsPage() {
       <div style={{ minHeight: "100vh", background: "#F5F5F5", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}>
         <div style={{ background: "white", borderRadius: "16px", border: "1px solid #EBEBEB", padding: "40px 32px", maxWidth: "360px", width: "100%" }}>
           <p style={{ fontSize: "20px", fontWeight: 700, color: "#111", marginBottom: "6px" }}>StayNote 後台</p>
-          <p style={{ fontSize: "13px", color: "#AAA", marginBottom: "24px" }}>請輸入管理員密碼</p>
+          <p style={{ fontSize: "13px", color: "#AAA", marginBottom: "24px" }}>請輸入管理員帳號</p>
+          <input
+            type="email"
+            value={emailInput}
+            onChange={e => setEmailInput(e.target.value)}
+            placeholder="Email"
+            autoFocus
+            style={{ width: "100%", border: "1px solid #E0E0E0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", marginBottom: "10px", boxSizing: "border-box" }}
+          />
           <input
             type="password"
             value={pwInput}
             onChange={e => setPwInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleLogin()}
             placeholder="密碼"
-            autoFocus
             style={{ width: "100%", border: "1px solid #E0E0E0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
           />
           {pwError && <p style={{ fontSize: "12px", color: "#E74C3C", marginBottom: "10px" }}>{pwError}</p>}
