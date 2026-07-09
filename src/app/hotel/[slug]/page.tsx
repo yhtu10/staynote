@@ -36,7 +36,7 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
   ] = await Promise.all([
     supabase.from("properties").select("id, name_en, name_zh, country, prefecture, cover_image_url, status").eq("id", propertyId).single(),
     supabase.from("travel_stories")
-      .select("id, title, zh_tw_title, description, zh_tw_description, hafh_url, likes_count, helpful_count, published_at, author_email, ai_rating")
+      .select("id, title, zh_tw_title, description, zh_tw_description, stay_description, hafh_url, likes_count, helpful_count, published_at, author_email, ai_rating")
       .eq("property_id", propertyId)
       .order("likes_count", { ascending: false })
       .limit(30),
@@ -272,8 +272,10 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
                 isAiRating: true,
                 title: curatedStory.zh_tw_title || curatedStory.title || undefined,
                 content: (() => {
-                  const desc = curatedStory.zh_tw_description || curatedStory.description || ""
-                  return desc.length > 200 ? desc.slice(0, 200) + "…" : desc || undefined
+                  const stay = curatedStory.stay_description ? curatedStory.stay_description.slice(0, 120) : ""
+                  const travel = curatedStory.zh_tw_description || curatedStory.description || ""
+                  const combined = [stay, travel].filter(Boolean).join("\n")
+                  return combined.length > 220 ? combined.slice(0, 220) + "…" : combined || undefined
                 })(),
                 helpfulCount: curatedStory.helpful_count ?? 0,
                 hafh_url: curatedStory.hafh_url ?? undefined,
@@ -355,8 +357,10 @@ export default async function HotelPage({ params }: { params: Promise<{ slug: st
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {(stories ?? []).filter((s) => s.id !== curatedStory?.id).slice(0, 15).map((story) => {
                 const authorName = story.author_email ? story.author_email.split("@")[0] : "旅人"
-                const desc = story.zh_tw_description || story.description || ""
-                const excerpt = desc.length > 180 ? desc.slice(0, 180) + "…" : desc
+                const stayPart = story.stay_description ? story.stay_description.slice(0, 120) : ""
+                const travelPart = story.zh_tw_description || story.description || ""
+                const combined = [stayPart, travelPart].filter(Boolean).join("\n")
+                const excerpt = combined.length > 220 ? combined.slice(0, 220) + "…" : combined
 
                 const card: CardData = {
                   id: story.id,

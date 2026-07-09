@@ -166,7 +166,7 @@ export default function HotelCardInteractive({ card, isCurated = false }: { card
 
       {/* Story content */}
       {showContent && (
-        <p style={{ fontSize: "13px", color: "#555", lineHeight: 1.75, marginBottom: "6px" }}>{card.content}</p>
+        <p style={{ fontSize: "13px", color: "#555", lineHeight: 1.75, marginBottom: "6px", whiteSpace: "pre-wrap" }}>{card.content}</p>
       )}
 
       {/* 推薦給 + date */}
