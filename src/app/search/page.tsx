@@ -386,7 +386,7 @@ async function searchHotels(query: string): Promise<{ results: SearchResult[]; i
   const topStoryIds = sortedPropIds.map(id => propScores.get(id)!.topStoryId)
   const { data: stories } = await supabase
     .from("travel_stories")
-    .select("id, title, zh_tw_title, zh_tw_description, description, property_id, likes_count, hafh_url, cover_image_url, author_email")
+    .select("id, title, zh_tw_title, zh_tw_description, description, stay_description, property_id, likes_count, hafh_url, cover_image_url, author_email")
     .in("id", topStoryIds)
 
   const storyMap = new Map((stories ?? []).map(s => [s.id, s]))
